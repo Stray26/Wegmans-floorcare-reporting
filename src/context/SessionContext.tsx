@@ -19,9 +19,11 @@ interface SessionContextValue {
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
 function defaultRange(): DateRange {
-  const end = new Date("2026-06-09");
+  // Default to the last 90 days so recent pilot inspections are visible
+  // out of the box (the date picker can narrow/widen this at any time).
+  const end = new Date();
   const start = new Date(end);
-  start.setDate(start.getDate() - 30);
+  start.setDate(start.getDate() - 90);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   return { start: iso(start), end: iso(end) };
 }
