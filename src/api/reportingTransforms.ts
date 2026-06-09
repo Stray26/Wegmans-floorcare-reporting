@@ -21,7 +21,11 @@ import type {
   ScoreThreshold,
   DateRange,
 } from "@/types/reporting";
-import { englishLabel, checkAreaIdForLabel } from "@/config/wegmans";
+import {
+  englishLabel,
+  checkAreaIdForLabel,
+  friendlyCheckmark,
+} from "@/config/wegmans";
 import { computeQspScore, getStatusForScore } from "@/utils/scoreStatus";
 import { DEFAULT_THRESHOLDS } from "@/config/scoreThresholds";
 
@@ -54,6 +58,7 @@ function buildCheckArea(
     }
   }
 
+  const friendly = friendlyCheckmark(itemLabel);
   const deficiencyCount = total - acceptable;
   const defTotal = [...defMap.values()].reduce((s, n) => s + n, 0) || 1;
   const breakdown: DeficiencyReport[] = [...defMap.entries()]
@@ -62,16 +67,16 @@ function buildCheckArea(
       bilingualLabel: bilingual,
       count,
       percentage: (count / defTotal) * 100,
-      checkAreaName: englishLabel(itemLabel),
+      checkAreaName: englishLabel(friendly),
     }))
     .sort((a, b) => b.count - a.count);
 
   const qsp = computeQspScore(acceptable, total);
 
   return {
-    checkAreaId: checkAreaIdForLabel(itemLabel),
-    checkAreaName: englishLabel(itemLabel),
-    bilingualLabel: itemLabel,
+    checkAreaId: checkAreaIdForLabel(friendly),
+    checkAreaName: englishLabel(friendly),
+    bilingualLabel: friendly,
     acceptableCount: acceptable,
     deficiencyCount,
     totalCount: total,
@@ -168,7 +173,7 @@ export function transformStoreReport(
         id: r.id,
         url,
         caption: englishLabel(r.deficiency),
-        checkAreaName: englishLabel(r.item),
+        checkAreaName: englishLabel(friendlyCheckmark(r.item)),
         deficiencyName: englishLabel(r.deficiency),
         capturedAt: r.inspectionDate,
       });

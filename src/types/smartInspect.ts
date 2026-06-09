@@ -96,7 +96,7 @@ export interface SIRawRecord {
   recordDate: string;
   uploadDate: string;
   config: string;
-  configId: number | string;
+  configId?: number | string;
   outerTier: string;
   outerTierId: number | string;
   midTier?: string;
@@ -112,7 +112,8 @@ export interface SIRawRecord {
   checkAttribute: string;
   /** true -> 100, false -> 0, null/undefined -> 50 */
   isGood: boolean | null;
-  photo?: boolean;
+  /** photo reference/url when present; null/false when none */
+  photo?: boolean | string | null;
   count: number;
 }
 
@@ -264,7 +265,7 @@ export function transformApiRecord(r: SIRawRecord): SIRecord {
     inspectionDate: r.recordDate,
     uploadDate: r.uploadDate,
     location: r.config,
-    locationId: String(r.configId),
+    locationId: r.configId != null ? String(r.configId) : "",
     building: r.outerTier,
     buildingId: String(r.outerTierId),
     floor: r.midTier,

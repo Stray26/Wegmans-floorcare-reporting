@@ -83,6 +83,21 @@ export function englishLabel(bilingual: string): string {
   return bilingual.split("/")[0].trim();
 }
 
+/**
+ * Live `checkmark` values are long descriptive strings prefixed with a number,
+ * e.g. "01. Vestibules - floor traffic lanes ... streaks." Map that leading
+ * number to the clean bilingual area label (1-based, matching CHECK_AREAS order).
+ * Falls back to the raw label if it can't be matched.
+ */
+export function friendlyCheckmark(raw: string): string {
+  const m = raw.match(/^\s*(\d+)\s*[.\-)]/);
+  if (m) {
+    const idx = parseInt(m[1], 10) - 1;
+    if (idx >= 0 && idx < CHECK_AREAS.length) return CHECK_AREAS[idx].label;
+  }
+  return raw;
+}
+
 /** Resolve a stable check-area id from a (bilingual) checkmark label. */
 export function checkAreaIdForLabel(label: string): string {
   const match = CHECK_AREAS.find((ca) => ca.label === label);

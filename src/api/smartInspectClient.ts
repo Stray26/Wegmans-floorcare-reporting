@@ -87,6 +87,22 @@ export function permittedStores(perms: SIPermissionsResponse): StoreMeta[] {
 
 /* ------------------------------ run widgets ---------------------------- */
 
+/**
+ * Extract an array from a widget value. Smart Inspect widgets may return a
+ * bare array OR wrap it in an object, e.g. inspection.allRecords ->
+ * { records: [...], total } and ticket.getTickets -> { records|tickets: [...] }.
+ */
+function widgetArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    if (Array.isArray(o.records)) return o.records as T[];
+    if (Array.isArray(o.tickets)) return o.tickets as T[];
+    if (Array.isArray(o.data)) return o.data as T[];
+  }
+  return [];
+}
+
 async function fetchRecordsAndTickets(
   stores: StoreMeta[],
   dateRange: DateRange
@@ -95,9 +111,10 @@ async function fetchRecordsAndTickets(
 
   if (MOCK_MODE) {
     const resp = getMockRunWidgets(outerTierIds, dateRange.start, dateRange.end);
-    const raw = (resp.widgets["inspection.allRecords"] ?? []) as SIRawRecord[];
-    const records = raw.map(transformApiRecord);
-    const tickets = (resp.widgets["ticket.getTickets"] ?? []) as SITicket[];
+    const records = widgetArray<SIRawRecord>(
+      resp.widgets["inspection.allRecords"]
+    ).map(transformApiRecord);
+    const tickets = widgetArray<SITicket>(resp.widgets["ticket.getTickets"]);
     return { records, tickets };
   }
 
@@ -110,20 +127,27 @@ async function fetchRecordsAndTickets(
     outerTiers: outerTierNames,
   };
 
-  const [inspResp, ticketResp] = await Promise.all([
-    proxy<SIRunWidgetsResponse>("runWidgets", {
-      filters: { ...baseFilters, inspectionRange: toFilter(dateRange) },
-      widgets: INSPECTION_WIDGETS,
-    }),
-    proxy<SIRunWidgetsResponse>("runWidgets", {
+  // Inspection data is the critical path. Tickets are best-effort: a ticket
+  // widget failure must NOT blank the whole dashboard.
+  const inspResp = await proxy<SIRunWidgetsResponse>("runWidgets", {
+    filters: { ...baseFilters, inspectionRange: toFilter(dateRange) },
+    widgets: INSPECTION_WIDGETS,
+  });
+
+  let tickets: SITicket[] = [];
+  try {
+    const ticketResp = await proxy<SIRunWidgetsResponse>("runWidgets", {
       filters: { ...baseFilters, isForTickets: true, ticketDates: toFilter(dateRange) },
       widgets: TICKET_WIDGETS,
-    }),
-  ]);
+    });
+    tickets = widgetArray<SITicket>(ticketResp.widgets["ticket.getTickets"]);
+  } catch (err) {
+    console.warn("Ticket widget failed; continuing without tickets.", err);
+  }
 
-  const raw = (inspResp.widgets["inspection.allRecords"] ?? []) as SIRawRecord[];
-  const records = raw.map(transformApiRecord);
-  const tickets = (ticketResp.widgets["ticket.getTickets"] ?? []) as SITicket[];
+  const records = widgetArray<SIRawRecord>(
+    inspResp.widgets["inspection.allRecords"]
+  ).map(transformApiRecord);
   return { records, tickets };
 }
 
@@ -194,8 +218,9 @@ export async function getTickets(stores: StoreMeta[], dateRange: DateRange) {
     },
     widgets: TICKET_WIDGETS,
   });
-  const tickets = (resp.widgets["ticket.getTickets"] ?? []) as SITicket[];
-  return tickets.map(transformTicket);
+  return widgetArray<SITicket>(resp.widgets["ticket.getTickets"]).map(
+    transformTicket
+  );
 }
 
 export async function createTicket(input: {
