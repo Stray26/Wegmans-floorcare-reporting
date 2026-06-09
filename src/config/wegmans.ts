@@ -1,0 +1,98 @@
+/**
+ * Wegmans Floorcare Pilot configuration constants.
+ * Centralized so Wegmans-specific values aren't scattered through the UI.
+ * When the live getConfig response is wired in, this becomes the fallback /
+ * default and the live config takes precedence.
+ */
+
+export const FLOORCARE_CONFIG = {
+  /** Smart Inspect numeric config id for the pilot. */
+  configId: 20035,
+  /** Smart Inspect numeric client id. */
+  clientId: 1172,
+  /** configs[] filter values are matched by NAME in runWidgets. */
+  configurationName: "Wegmans Floorcare Pilot",
+  /** midTier ("area-type group") value for Wegmans. */
+  midTier: "01",
+  /** selectTier = the inspection form. */
+  areaTypeName: "Daily Floor Care Compliance Check",
+  /** Default IANA timezone for inspection/ticket date filters. */
+  timezone: "America/New_York",
+} as const;
+
+/** The 10 floorcare check areas (bilingual). */
+export const CHECK_AREAS: { id: string; label: string }[] = [
+  { id: "ca-vestibules", label: "Vestibules / Vestibulos" },
+  {
+    id: "ca-sales-front",
+    label: "Sales & Circulation - Front End / Ventas y circulacion - Area frontal",
+  },
+  {
+    id: "ca-sales-primary",
+    label: "Sales & Circulation - Primary / Ventas y circulacion - Area principal",
+  },
+  {
+    id: "ca-sales-secondary",
+    label:
+      "Sales & Circulation - Secondary / Ventas y circulacion - Area secundaria",
+  },
+  {
+    id: "ca-cafe",
+    label:
+      "Cafe Seating / Restaurant Areas / Asientos de cafeteria / Areas de restaurante",
+  },
+  { id: "ca-restrooms", label: "Restrooms / Banos" },
+  {
+    id: "ca-foodprep",
+    label: "Food Prep Areas / Areas de preparacion de alimentos",
+  },
+  {
+    id: "ca-coolers",
+    label: "Coolers and Freezers / Camaras frigorificas y congeladores",
+  },
+  { id: "ca-backroom", label: "Backroom Areas / Areas de almacen" },
+  {
+    id: "ca-breakroom",
+    label: "Employee Breakroom / Sala de descanso para empleados",
+  },
+];
+
+/** CheckAttributes. The first is the single "Acceptable" attribute. */
+export const CHECK_ATTRIBUTES: { id: string; label: string; isAcceptable: boolean }[] =
+  [
+    { id: "attr-acceptable", label: "Acceptable", isAcceptable: true },
+    { id: "attr-buildup", label: "Buildup / Acumulacion", isAcceptable: false },
+    { id: "attr-cobweb", label: "Cobweb / Telarana", isAcceptable: false },
+    { id: "attr-debris", label: "Debris / Residuos", isAcceptable: false },
+    { id: "attr-dull", label: "Dull / Opaco", isAcceptable: false },
+    { id: "attr-dust", label: "Dust / Polvo", isAcceptable: false },
+    { id: "attr-graffiti", label: "Graffiti / Grafiti", isAcceptable: false },
+    { id: "attr-malodor", label: "Malodor / Mal olor", isAcceptable: false },
+    { id: "attr-scuff", label: "Scuff / Marca", isAcceptable: false },
+    { id: "attr-soil", label: "Soil / Suciedad", isAcceptable: false },
+    { id: "attr-spot", label: "Spot / Mancha", isAcceptable: false },
+    { id: "attr-streak", label: "Streak / Raya", isAcceptable: false },
+  ];
+
+export const DEFICIENCY_ATTRIBUTES = CHECK_ATTRIBUTES.filter(
+  (a) => !a.isAcceptable
+);
+
+/** "Soil / Suciedad" -> "Soil" */
+export function englishLabel(bilingual: string): string {
+  return bilingual.split("/")[0].trim();
+}
+
+/** Resolve a stable check-area id from a (bilingual) checkmark label. */
+export function checkAreaIdForLabel(label: string): string {
+  const match = CHECK_AREAS.find((ca) => ca.label === label);
+  if (match) return match.id;
+  // fallback: slug of the english label
+  return (
+    "ca-" +
+    englishLabel(label)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+  );
+}

@@ -1,0 +1,7 @@
+npm error code ENOTEMPTY
+npm error syscall rename
+npm error path /sessions/nice-eager-euler/mnt/Wegman's Customer Report/node_modules/tailwindcss
+npm error dest /sessions/nice-eager-euler/mnt/Wegman's Customer Report/node_modules/.tailwindcss-eAIpbqzZ
+npm error errno -39
+npm error ENOTEMPTY: directory not empty, rename '/sessions/nice-eager-euler/mnt/Wegman's Customer Report/node_modules/tailwindcss' -> '/sessions/nice-eager-euler/mnt/Wegman's Customer Report/node_modules/.tailwindcss-eAIpbqzZ'
+npm error A complete log of this run can be found in: /sessions/nice-eager-euler/mnt/Wegman's Customer Report/.npm-cache/_logs/2026-06-09T18_02_36_060Z-debug-0.log
