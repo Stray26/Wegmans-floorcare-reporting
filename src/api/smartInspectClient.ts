@@ -58,9 +58,11 @@ async function proxy<T>(endpoint: string, body: Record<string, unknown>): Promis
 }
 
 function toFilter(dateRange: DateRange): { startDate: string; endDate: string; timezone: string } {
+  // Smart Inspect requires RFC-3339 date-time (with a timezone marker), e.g.
+  // "2026-06-01T00:00:00Z" — a bare "...T00:00:00" is rejected by the schema.
   return {
-    startDate: `${dateRange.start}T00:00:00`,
-    endDate: `${dateRange.end}T23:59:59`,
+    startDate: `${dateRange.start}T00:00:00Z`,
+    endDate: `${dateRange.end}T23:59:59Z`,
     timezone: FLOORCARE_CONFIG.timezone,
   };
 }
