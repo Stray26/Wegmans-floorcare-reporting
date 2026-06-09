@@ -34,3 +34,5 @@ pnpm-debug.log*
 .npm-install*.log
 .npm-clean.log
 .npmrc
+install.out
+install.status
