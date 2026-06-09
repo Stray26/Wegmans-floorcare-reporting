@@ -1,0 +1,24 @@
+# The Vercel CLI uploads everything NOT listed here (it ignores .gitignore),
+# so keep local-only / build artifacts out of deployments.
+node_modules
+dist
+.git
+.vercel
+
+# env files (Vercel injects env vars from project settings)
+.env
+.env.local
+.env.*.local
+
+# local sandbox / install artifacts — must never ship (poisons npm cache)
+.npmrc
+.npm-cache
+.tmp
+*.log
+install.out
+install.status
+
+# os / editor
+.DS_Store
+.vscode
+.idea

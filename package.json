@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Wegmans Floorcare Pilot custom reporting portal built on Smart Inspect data",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

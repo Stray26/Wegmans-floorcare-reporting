@@ -36,3 +36,4 @@ pnpm-debug.log*
 .npmrc
 install.out
 install.status
+.env*
