@@ -24,9 +24,26 @@ import { formatRelativeDays } from "@/utils/formatting";
 export function StoreManagerDashboard() {
   const { stores } = useSmartInspectPermissions();
   const store0 = stores[0] ?? null;
-  const { data: store, isLoading, isFetching } = useStoreReport(store0);
+  const {
+    data: store,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+  } = useStoreReport(store0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  if (isError) {
+    return (
+      <div className="mx-auto mt-10 max-w-lg rounded-lg border border-status-failed-bg bg-status-failed-bg/40 p-6 text-center">
+        <p className="font-semibold text-status-failed">Couldn’t load store</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {(error as Error)?.message ?? "Unknown error from Smart Inspect."}
+        </p>
+      </div>
+    );
+  }
 
   if (isLoading || !store) {
     return (

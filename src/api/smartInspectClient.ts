@@ -11,6 +11,7 @@ import {
   getMockPermissions,
   getMockRunWidgets,
   getMockTickets,
+  getMockListTags,
   mockPhotoUrl,
   type DemoRole,
 } from "./mockData";
@@ -30,6 +31,7 @@ import {
   type SITicket,
   type SIRunWidgetsResponse,
   type SIPermissionsResponse,
+  type SIListTagsResponse,
   type SIFilters,
 } from "@/types/smartInspect";
 
@@ -223,11 +225,17 @@ export async function getTickets(stores: StoreMeta[], dateRange: DateRange) {
   );
 }
 
+export async function getTicketTags(): Promise<SIListTagsResponse> {
+  if (MOCK_MODE) return getMockListTags();
+  return proxy<SIListTagsResponse>("listTags", {});
+}
+
 export async function createTicket(input: {
   storeName: string;
   areaName: string;
   deficiency: string;
   note?: string;
+  priorityId?: number;
 }): Promise<{ ticketId: string }> {
   if (MOCK_MODE) {
     return { ticketId: `WGM-${Math.floor(Math.random() * 9000 + 1000)}` };
@@ -241,6 +249,7 @@ export async function createTicket(input: {
       deficiency: input.deficiency,
       areatype: FLOORCARE_CONFIG.areaTypeName,
       description: input.note,
+      priorityId: input.priorityId,
     },
   });
   return { ticketId: `WGM-${resp.ticket.ticketId}` };

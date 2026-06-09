@@ -3,7 +3,9 @@ import { PageShell } from "@/components/layout/PageShell";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import { PortfolioOverview } from "@/pages/PortfolioOverview";
 import { StoreManagerDashboard } from "@/pages/StoreManagerDashboard";
-import { ComingSoon } from "@/pages/ComingSoon";
+import { CustomDetailReport } from "@/pages/CustomDetailReport";
+import { TicketsPage } from "@/pages/TicketsPage";
+import { ScoreSettings } from "@/pages/ScoreSettings";
 
 /** Land users on the right home based on their Smart Inspect access. */
 function HomeRedirect() {
@@ -19,33 +21,9 @@ export default function App() {
         <Route index element={<HomeRedirect />} />
         <Route path="/portfolio" element={<PortfolioOverview />} />
         <Route path="/my-store" element={<StoreManagerDashboard />} />
-        <Route
-          path="/report"
-          element={
-            <ComingSoon
-              title="Custom Detail Report"
-              subtitle="4-level QSP drilldown — Configuration → Store → Area Type → Check"
-            />
-          }
-        />
-        <Route
-          path="/tickets"
-          element={
-            <ComingSoon
-              title="Tickets"
-              subtitle="Smart Inspect ticket tracking and follow-up"
-            />
-          }
-        />
-        <Route
-          path="/settings/scores"
-          element={
-            <ComingSoon
-              title="Score Settings"
-              subtitle="Configure QSP thresholds"
-            />
-          }
-        />
+        <Route path="/report" element={<CustomDetailReport />} />
+        <Route path="/tickets" element={<TicketsPage />} />
+        <Route path="/settings/scores" element={<ScoreSettings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

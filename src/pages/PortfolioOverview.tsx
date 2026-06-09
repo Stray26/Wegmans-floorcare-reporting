@@ -27,7 +27,12 @@ import type { ScoreStatus, StoreReport } from "@/types/reporting";
 
 export function PortfolioOverview() {
   const { stores: permittedStores, accessMode } = useSmartInspectPermissions();
-  const { data: portfolio, isLoading } = usePortfolioReport(permittedStores);
+  const {
+    data: portfolio,
+    isLoading,
+    isError,
+    error,
+  } = usePortfolioReport(permittedStores);
   const { toast } = useToast();
 
   const [search, setSearch] = React.useState("");
@@ -50,6 +55,17 @@ export function PortfolioOverview() {
 
   const toggleStatus = (status: ScoreStatus) =>
     setStatusFilter((cur) => (cur === status ? null : status));
+
+  if (isError) {
+    return (
+      <div className="mx-auto mt-10 max-w-lg rounded-lg border border-status-failed-bg bg-status-failed-bg/40 p-6 text-center">
+        <p className="font-semibold text-status-failed">Couldn’t load portfolio</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {(error as Error)?.message ?? "Unknown error from Smart Inspect."}
+        </p>
+      </div>
+    );
+  }
 
   if (isLoading || !portfolio) {
     return (
