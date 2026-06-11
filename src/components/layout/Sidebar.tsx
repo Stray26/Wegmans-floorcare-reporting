@@ -12,8 +12,9 @@ import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 
 /**
  * Wegmans wordmark. Renders the brand logo from /wegmans-logo.png (drop the
- * file in /public). The black wordmark is inverted to white for the green
- * sidebar. Falls back to a text wordmark if the image isn't present.
+ * file in /public). Shown on a white chip so it reads on the green sidebar and
+ * works whether the file has a transparent or white background. Falls back to a
+ * text wordmark if the image isn't present.
  */
 function BrandLogo() {
   const [ok, setOk] = useState(true);
@@ -23,13 +24,14 @@ function BrandLogo() {
     );
   }
   return (
-    <img
-      src="/wegmans-logo.png"
-      alt="Wegmans"
-      onError={() => setOk(false)}
-      className="h-7 w-auto"
-      style={{ filter: "brightness(0) invert(1)" }}
-    />
+    <span className="inline-flex items-center rounded-md bg-white px-3 py-1.5 shadow-sm">
+      <img
+        src="/wegmans-logo.png"
+        alt="Wegmans"
+        onError={() => setOk(false)}
+        className="h-6 w-auto"
+      />
+    </span>
   );
 }
 
