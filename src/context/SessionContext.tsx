@@ -37,10 +37,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [dateRange, setDateRange] = React.useState<DateRange>(defaultRange());
   const [demoData, setDemoDataState] = React.useState<boolean>(DEFAULT_MOCK);
 
-  // Keep the client's runtime mock flag in sync with the toggle.
-  React.useEffect(() => {
-    setMockMode(demoData);
-  }, [demoData]);
+  // Flip the client's runtime mock flag SYNCHRONOUSLY before the state update
+  // re-renders consumers. If we did this in an effect, the permissions query
+  // (a descendant) would refetch before the provider's effect ran, so it would
+  // read the old data source — yielding live permissions with mock data (or
+  // vice-versa). Setting it here guarantees isMockMode() is correct before any
+  // query refetches.
+  const setDemoData = React.useCallback((v: boolean) => {
+    setMockMode(v);
+    setDemoDataState(v);
+  }, []);
 
   const value = React.useMemo(
     () => ({
@@ -49,9 +55,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       dateRange,
       setDateRange,
       demoData,
-      setDemoData: setDemoDataState,
+      setDemoData,
     }),
-    [role, dateRange, demoData]
+    [role, dateRange, demoData, setDemoData]
   );
 
   return (
