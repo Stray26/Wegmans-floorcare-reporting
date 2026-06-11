@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Search, Download } from "lucide-react";
+import { Search, Download, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageShell";
 import {
   Card,
@@ -22,7 +22,9 @@ import { StoreDetailModal } from "@/components/reports/StoreDetailModal";
 import { useToast } from "@/components/ui/toast";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import { usePortfolioReport } from "@/hooks/usePortfolioReport";
+import { useSession } from "@/context/SessionContext";
 import { formatScore } from "@/utils/formatting";
+import { exportPortfolioPdf } from "@/utils/portfolioPdf";
 import type { ScoreStatus, StoreReport } from "@/types/reporting";
 
 export function PortfolioOverview() {
@@ -34,6 +36,31 @@ export function PortfolioOverview() {
     error,
   } = usePortfolioReport(permittedStores);
   const { toast } = useToast();
+  const { dateRange } = useSession();
+  const [exporting, setExporting] = React.useState(false);
+
+  const handleExport = async () => {
+    if (!portfolio) return;
+    setExporting(true);
+    toast({ title: "Generating PDF", description: "Building the portfolio report…" });
+    try {
+      await exportPortfolioPdf(portfolio, {
+        dateStart: dateRange.start,
+        dateEnd: dateRange.end,
+        scope:
+          accessMode === "group"
+            ? "Wegmans Floorcare Compliance · Region"
+            : "Wegmans Floorcare Compliance",
+      });
+    } catch (err) {
+      toast({
+        title: "Export failed",
+        description: (err as Error)?.message ?? "Could not generate the PDF.",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<ScoreStatus | null>(
@@ -94,15 +121,15 @@ export function PortfolioOverview() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                toast({
-                  title: "Export started",
-                  description: "Generating portfolio PDF…",
-                })
-              }
+              disabled={exporting}
+              onClick={handleExport}
             >
-              <Download className="h-4 w-4" />
-              Export
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Export PDF
             </Button>
           </>
         }
