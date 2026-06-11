@@ -184,18 +184,18 @@ export function PortfolioOverview() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Deficiency Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DeficiencyBreakdownChart deficiencies={portfolio.topDeficiencies} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
               <CardTitle>Upload Compliance</CardTitle>
             </CardHeader>
             <CardContent>
               <UploadComplianceChart portfolio={portfolio} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Deficiency Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DeficiencyBreakdownChart deficiencies={portfolio.topDeficiencies} />
             </CardContent>
           </Card>
         </div>
