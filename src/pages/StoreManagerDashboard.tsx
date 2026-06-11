@@ -21,6 +21,8 @@ import { useToast } from "@/components/ui/toast";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import { useStoreReport } from "@/hooks/useStoreReport";
 import { formatRelativeDays, formatDateTime } from "@/utils/formatting";
+import { exportStorePdf } from "@/utils/storePdf";
+import { Loader2 } from "lucide-react";
 
 export function StoreManagerDashboard() {
   const { stores } = useSmartInspectPermissions();
@@ -39,6 +41,26 @@ export function StoreManagerDashboard() {
   } = useStoreReport(selectedStore);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!store) return;
+    setExporting(true);
+    toast({
+      title: "Generating PDF",
+      description: `Building the report for ${store.storeName}…`,
+    });
+    try {
+      await exportStorePdf(store);
+    } catch (err) {
+      toast({
+        title: "Export failed",
+        description: (err as Error)?.message ?? "Could not generate the PDF.",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const changeStore = (id: string) => {
     setSelectedId(id);
@@ -105,14 +127,14 @@ export function StoreManagerDashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                toast({
-                  title: "Export started",
-                  description: `Generating PDF for ${store.storeName}…`,
-                })
-              }
+              disabled={exporting}
+              onClick={handleExport}
             >
-              <Download className="h-4 w-4" />
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
               Export PDF
             </Button>
           </>
