@@ -58,17 +58,60 @@ const PILOT_STORES: StoreSeed[] = [
   { outerTierId: 92, storeNumber: "92", outerTier: "92 - Military Road", city: "Buffalo", state: "NY" },
 ];
 
+// Real Wegmans-market cities across the chain's footprint, for a believable
+// 100-store demo portfolio.
 const CITY_POOL: { city: string; state: string }[] = [
-  { city: "Rochester", state: "NY" }, { city: "Syracuse", state: "NY" },
-  { city: "Albany", state: "NY" }, { city: "Princeton", state: "NJ" },
-  { city: "Cherry Hill", state: "NJ" }, { city: "Bridgewater", state: "NJ" },
-  { city: "Allentown", state: "PA" }, { city: "Pittsburgh", state: "PA" },
-  { city: "King of Prussia", state: "PA" }, { city: "Fairfax", state: "VA" },
-  { city: "Richmond", state: "VA" }, { city: "Chantilly", state: "VA" },
+  // NY
+  { city: "Rochester", state: "NY" }, { city: "Pittsford", state: "NY" },
+  { city: "Penfield", state: "NY" }, { city: "Fairport", state: "NY" },
+  { city: "Henrietta", state: "NY" }, { city: "Greece", state: "NY" },
+  { city: "Webster", state: "NY" }, { city: "Brighton", state: "NY" },
+  { city: "Canandaigua", state: "NY" }, { city: "Victor", state: "NY" },
+  { city: "Geneva", state: "NY" }, { city: "Auburn", state: "NY" },
+  { city: "Syracuse", state: "NY" }, { city: "DeWitt", state: "NY" },
+  { city: "Liverpool", state: "NY" }, { city: "Ithaca", state: "NY" },
+  { city: "Corning", state: "NY" }, { city: "Elmira", state: "NY" },
+  { city: "Amherst", state: "NY" }, { city: "Cheektowaga", state: "NY" },
+  { city: "Niagara Falls", state: "NY" }, { city: "Lancaster", state: "NY" },
+  { city: "Albany", state: "NY" },
+  // NJ
+  { city: "Bridgewater", state: "NJ" }, { city: "Princeton", state: "NJ" },
+  { city: "Cherry Hill", state: "NJ" }, { city: "Mount Laurel", state: "NJ" },
+  { city: "Manalapan", state: "NJ" }, { city: "Woodbridge", state: "NJ" },
+  { city: "Ocean", state: "NJ" }, { city: "Hanover", state: "NJ" },
+  { city: "Montvale", state: "NJ" }, { city: "Parsippany", state: "NJ" },
+  { city: "Hillsborough", state: "NJ" },
+  // PA
+  { city: "Pittsburgh", state: "PA" }, { city: "Erie", state: "PA" },
+  { city: "State College", state: "PA" }, { city: "Allentown", state: "PA" },
+  { city: "Bethlehem", state: "PA" }, { city: "King of Prussia", state: "PA" },
+  { city: "Malvern", state: "PA" }, { city: "Downingtown", state: "PA" },
+  { city: "Warrington", state: "PA" }, { city: "Collegeville", state: "PA" },
+  { city: "Lancaster", state: "PA" },
+  // MA
+  { city: "Westwood", state: "MA" }, { city: "Burlington", state: "MA" },
+  { city: "Natick", state: "MA" }, { city: "Chestnut Hill", state: "MA" },
+  { city: "Medford", state: "MA" },
+  // VA
+  { city: "Fairfax", state: "VA" }, { city: "Sterling", state: "VA" },
+  { city: "Chantilly", state: "VA" }, { city: "Reston", state: "VA" },
+  { city: "Alexandria", state: "VA" }, { city: "Richmond", state: "VA" },
+  { city: "Charlottesville", state: "VA" }, { city: "Fredericksburg", state: "VA" },
+  { city: "Midlothian", state: "VA" }, { city: "Short Pump", state: "VA" },
+  { city: "Leesburg", state: "VA" }, { city: "Gainesville", state: "VA" },
+  { city: "Dulles", state: "VA" },
+  // MD
   { city: "Columbia", state: "MD" }, { city: "Germantown", state: "MD" },
-  { city: "Frederick", state: "MD" }, { city: "Chapel Hill", state: "NC" },
-  { city: "Cary", state: "NC" }, { city: "Westwood", state: "MA" },
-  { city: "Burlington", state: "MA" }, { city: "Natick", state: "MA" },
+  { city: "Frederick", state: "MD" }, { city: "Hunt Valley", state: "MD" },
+  { city: "Owings Mills", state: "MD" }, { city: "Crofton", state: "MD" },
+  { city: "Bel Air", state: "MD" }, { city: "Lanham", state: "MD" },
+  { city: "Rockville", state: "MD" }, { city: "Woodmore", state: "MD" },
+  // NC
+  { city: "Cary", state: "NC" }, { city: "Raleigh", state: "NC" },
+  { city: "Chapel Hill", state: "NC" }, { city: "Holly Springs", state: "NC" },
+  { city: "Wake Forest", state: "NC" },
+  // DC
+  { city: "Washington", state: "DC" },
 ];
 
 function buildStoreSeeds(extra: number): StoreSeed[] {
@@ -89,7 +132,7 @@ function buildStoreSeeds(extra: number): StoreSeed[] {
   return seeds;
 }
 
-export const STORE_SEEDS = buildStoreSeeds(44);
+export const STORE_SEEDS = buildStoreSeeds(97);
 
 function seedById(id: string): StoreSeed | undefined {
   return STORE_SEEDS.find((s) => String(s.outerTierId) === String(id));
@@ -149,7 +192,7 @@ export function getMockListTags(): SIListTagsResponse {
       { id: 3, description: "High", color: "#dc2626", order: 3, isHot: true },
     ],
     categories: [
-      { id: 1, description: "Floor Care", color: "#0f1c3f", order: 1, isDefault: true },
+      { id: 1, description: "Floor Care", color: "#006938", order: 1, isDefault: true },
       { id: 2, description: "Sanitation", color: "#2563eb", order: 2 },
     ],
   };

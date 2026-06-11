@@ -4,9 +4,9 @@ import { useSession } from "@/context/SessionContext";
 import type { StoreMeta } from "@/api/reportingTransforms";
 
 export function useTickets(stores: StoreMeta[]) {
-  const { dateRange } = useSession();
+  const { dateRange, demoData } = useSession();
   return useQuery({
-    queryKey: ["tickets", stores.map((s) => s.buildingId), dateRange],
+    queryKey: ["tickets", stores.map((s) => s.buildingId), dateRange, demoData],
     queryFn: () => getTickets(stores, dateRange),
     enabled: stores.length > 0,
   });

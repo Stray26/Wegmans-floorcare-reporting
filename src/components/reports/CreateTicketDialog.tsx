@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { createTicket, getTicketTags, MOCK_MODE } from "@/api/smartInspectClient";
+import { createTicket, getTicketTags, isMockMode } from "@/api/smartInspectClient";
 import { CHECK_AREAS, DEFICIENCY_ATTRIBUTES } from "@/config/wegmans";
 import type { StoreMeta } from "@/api/reportingTransforms";
 
@@ -97,8 +97,8 @@ export function CreateTicketDialog({
           <DialogHeader>
             <DialogTitle>Create Ticket</DialogTitle>
             <DialogDescription>
-              {MOCK_MODE
-                ? "Mock mode — this won’t write to Smart Inspect."
+              {isMockMode()
+                ? "Demo mode — this won’t write to Smart Inspect."
                 : "This creates a ticket in Smart Inspect."}
             </DialogDescription>
           </DialogHeader>

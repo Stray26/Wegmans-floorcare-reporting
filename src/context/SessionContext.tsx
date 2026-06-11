@@ -1,19 +1,23 @@
 import * as React from "react";
 import type { DateRange } from "@/types/reporting";
 import type { DemoRole } from "@/api/mockData";
+import { DEFAULT_MOCK, setMockMode } from "@/api/smartInspectClient";
 
 /**
  * Demo session state.
- *  - role: drives the Boss/Corporate <-> Store Manager demo toggle. In live
- *    mode this is replaced by real Smart Inspect permissions; the toggle is a
- *    research-preview convenience only.
+ *  - role: drives the Corporate/Region/Store Manager demo toggle. Only takes
+ *    effect in demo-data mode; live mode uses real Smart Inspect permissions.
  *  - dateRange: the active reporting window for all data hooks.
+ *  - demoData: when true, the app runs on the mock Wegmans portfolio instead of
+ *    live Smart Inspect data. Kept in sync with the client's runtime mock flag.
  */
 interface SessionContextValue {
   role: DemoRole;
   setRole: (r: DemoRole) => void;
   dateRange: DateRange;
   setDateRange: (r: DateRange) => void;
+  demoData: boolean;
+  setDemoData: (v: boolean) => void;
 }
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
@@ -31,10 +35,23 @@ function defaultRange(): DateRange {
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = React.useState<DemoRole>("boss");
   const [dateRange, setDateRange] = React.useState<DateRange>(defaultRange());
+  const [demoData, setDemoDataState] = React.useState<boolean>(DEFAULT_MOCK);
+
+  // Keep the client's runtime mock flag in sync with the toggle.
+  React.useEffect(() => {
+    setMockMode(demoData);
+  }, [demoData]);
 
   const value = React.useMemo(
-    () => ({ role, setRole, dateRange, setDateRange }),
-    [role, dateRange]
+    () => ({
+      role,
+      setRole,
+      dateRange,
+      setDateRange,
+      demoData,
+      setDemoData: setDemoDataState,
+    }),
+    [role, dateRange, demoData]
   );
 
   return (

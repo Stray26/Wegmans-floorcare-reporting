@@ -8,13 +8,14 @@ import {
 } from "recharts";
 import type { DeficiencyReport } from "@/types/reporting";
 
+// Wegmans-green-led palette for the deficiency donut.
 const PALETTE = [
-  "#0f1c3f",
-  "#1e3a8a",
-  "#2563eb",
-  "#3b82f6",
-  "#60a5fa",
-  "#93c5fd",
+  "#006938",
+  "#097a45",
+  "#2f9e5f",
+  "#57b97f",
+  "#86d0a3",
+  "#b7e3c8",
   "#d97706",
   "#dc2626",
 ];

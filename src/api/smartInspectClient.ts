@@ -35,8 +35,23 @@ import {
   type SIFilters,
 } from "@/types/smartInspect";
 
-export const MOCK_MODE =
+/**
+ * Mock mode is runtime-switchable so a "Demo data" toggle can flip the live
+ * site between real Smart Inspect data and the mock Wegmans portfolio without
+ * a redeploy. The env var sets the initial value; SessionProvider keeps the
+ * runtime flag in sync, and data hooks include it in their query keys so
+ * toggling triggers a refetch.
+ */
+export const DEFAULT_MOCK =
   (import.meta.env.VITE_ENABLE_MOCK_DATA ?? "true") !== "false";
+
+let runtimeMock = DEFAULT_MOCK;
+export function isMockMode(): boolean {
+  return runtimeMock;
+}
+export function setMockMode(value: boolean): void {
+  runtimeMock = value;
+}
 
 const INSPECTION_WIDGETS = {
   "inspection.details": {},
@@ -72,7 +87,7 @@ function toFilter(dateRange: DateRange): { startDate: string; endDate: string; t
 /* ----------------------------- permissions ----------------------------- */
 
 export async function getPermissions(role: DemoRole): Promise<SIPermissionsResponse> {
-  if (MOCK_MODE) return getMockPermissions(role);
+  if (isMockMode()) return getMockPermissions(role);
   return proxy<SIPermissionsResponse>("getPermissions", {
     permissionType: "Access",
   });
@@ -111,7 +126,7 @@ async function fetchRecordsAndTickets(
 ): Promise<{ records: SIRecord[]; tickets: SITicket[] }> {
   const outerTierIds = stores.map((s) => s.buildingId);
 
-  if (MOCK_MODE) {
+  if (isMockMode()) {
     const resp = getMockRunWidgets(outerTierIds, dateRange.start, dateRange.end);
     const records = widgetArray<SIRawRecord>(
       resp.widgets["inspection.allRecords"]
@@ -163,9 +178,12 @@ function groupByBuilding(records: SIRecord[]): Map<string, SIRecord[]> {
   return map;
 }
 
-const photoResolver = MOCK_MODE
-  ? (r: SIRecord) => mockPhotoUrl(r.id)
-  : undefined; // live photos require inspection.imageRecords (not yet wired)
+// In mock mode, synthesize photo URLs; live photos require
+// inspection.imageRecords (not yet wired). Computed per-call so the runtime
+// demo toggle takes effect.
+function currentPhotoResolver(): ((r: SIRecord) => string | null) | undefined {
+  return isMockMode() ? (r: SIRecord) => mockPhotoUrl(r.id) : undefined;
+}
 
 /* ------------------------------- reports ------------------------------- */
 
@@ -188,7 +206,7 @@ export async function getPortfolioReport(
       String(FLOORCARE_CONFIG.configId),
       FLOORCARE_CONFIG.configurationName,
       thresholds,
-      photoResolver
+      currentPhotoResolver()
     )
   );
 
@@ -207,7 +225,7 @@ export async function getStoreReport(
 /* ------------------------------- tickets ------------------------------- */
 
 export async function getTickets(stores: StoreMeta[], dateRange: DateRange) {
-  if (MOCK_MODE) {
+  if (isMockMode()) {
     return getMockTickets(stores.map((s) => s.buildingId)).map(transformTicket);
   }
   const resp = await proxy<SIRunWidgetsResponse>("runWidgets", {
@@ -226,7 +244,7 @@ export async function getTickets(stores: StoreMeta[], dateRange: DateRange) {
 }
 
 export async function getTicketTags(): Promise<SIListTagsResponse> {
-  if (MOCK_MODE) return getMockListTags();
+  if (isMockMode()) return getMockListTags();
   return proxy<SIListTagsResponse>("listTags", {});
 }
 
@@ -237,7 +255,7 @@ export async function createTicket(input: {
   note?: string;
   priorityId?: number;
 }): Promise<{ ticketId: string }> {
-  if (MOCK_MODE) {
+  if (isMockMode()) {
     return { ticketId: `WGM-${Math.floor(Math.random() * 9000 + 1000)}` };
   }
   const resp = await proxy<{ ticket: { ticketId: number } }>("createTicket", {

@@ -30,13 +30,14 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Wegmans floorcare compliance status palette
-        navy: {
-          DEFAULT: "#0f1c3f",
-          50: "#f3f5fa",
-          800: "#13234d",
-          900: "#0f1c3f",
-          950: "#0a142e",
+        // Wegmans brand green (chrome: sidebar, primary actions, accents).
+        // Status colors below stay functional and independent of brand.
+        brand: {
+          DEFAULT: "#006938",
+          50: "#e7f3ec",
+          800: "#097a45",
+          900: "#006938",
+          950: "#003a1f",
         },
         status: {
           passed: "#16a34a",

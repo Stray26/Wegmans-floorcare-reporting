@@ -51,10 +51,10 @@ export function Sidebar() {
   const items = NAV.filter((n) => !n.modes || n.modes.includes(accessMode));
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col bg-navy-900 text-white md:flex">
+    <aside className="hidden w-64 shrink-0 flex-col bg-brand-900 text-white md:flex">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
-          <ShieldCheck className="h-5 w-5 text-status-passed" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15">
+          <ShieldCheck className="h-5 w-5 text-white" />
         </div>
         <div className="leading-tight">
           <p className="text-sm font-semibold">Wegmans</p>

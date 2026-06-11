@@ -55,7 +55,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {t.variant === "success" ? (
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-status-passed" />
             ) : (
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-navy-900" />
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-900" />
             )}
             <div className="flex-1">
               <p className="text-sm font-semibold text-foreground">{t.title}</p>

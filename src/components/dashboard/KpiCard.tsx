@@ -30,7 +30,7 @@ export function KpiCard({
       className={cn(
         "p-4 transition-all",
         clickable && "cursor-pointer hover:shadow-card-hover",
-        active && "ring-2 ring-navy-900 ring-offset-1"
+        active && "ring-2 ring-brand-900 ring-offset-1"
       )}
     >
       <div className="flex items-start justify-between">

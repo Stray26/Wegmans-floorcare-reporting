@@ -8,7 +8,7 @@
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
-    --primary: 222 60% 16%;
+    --primary: 152 100% 21%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 20% 94%;
     --secondary-foreground: 222 47% 16%;
@@ -18,7 +18,7 @@
     --accent-foreground: 222 47% 16%;
     --border: 214 20% 90%;
     --input: 214 20% 88%;
-    --ring: 222 60% 30%;
+    --ring: 152 45% 30%;
     --radius: 0.625rem;
   }
 

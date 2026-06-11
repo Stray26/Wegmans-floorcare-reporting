@@ -93,7 +93,7 @@ function AreaRow({
                   </div>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-navy-900"
+                      className="h-full rounded-full bg-brand-900"
                       style={{ width: `${(d.count / defTotal) * 100}%` }}
                     />
                   </div>

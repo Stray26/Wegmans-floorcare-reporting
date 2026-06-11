@@ -54,7 +54,7 @@ export function DateRangePicker({ className }: { className?: string }) {
         className={cn(
           "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
           active === "Today"
-            ? "bg-card text-navy-900 shadow-sm"
+            ? "bg-card text-brand-900 shadow-sm"
             : "text-muted-foreground hover:text-foreground"
         )}
       >
@@ -67,7 +67,7 @@ export function DateRangePicker({ className }: { className?: string }) {
           className={cn(
             "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
             active === p.label
-              ? "bg-card text-navy-900 shadow-sm"
+              ? "bg-card text-brand-900 shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           )}
         >

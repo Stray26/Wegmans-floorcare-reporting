@@ -5,11 +5,17 @@ import { useScoreThresholds } from "@/hooks/useScoreThresholds";
 import type { StoreMeta } from "@/api/reportingTransforms";
 
 export function usePortfolioReport(stores: StoreMeta[]) {
-  const { dateRange } = useSession();
+  const { dateRange, demoData } = useSession();
   const { thresholds } = useScoreThresholds();
 
   return useQuery({
-    queryKey: ["portfolio", stores.map((s) => s.buildingId), dateRange, thresholds],
+    queryKey: [
+      "portfolio",
+      stores.map((s) => s.buildingId),
+      dateRange,
+      thresholds,
+      demoData,
+    ],
     queryFn: () => getPortfolioReport(stores, dateRange, thresholds),
     enabled: stores.length > 0,
   });

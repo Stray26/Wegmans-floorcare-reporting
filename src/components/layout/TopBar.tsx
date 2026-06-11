@@ -11,7 +11,7 @@ const ROLE_LABELS: Record<DemoRole, string> = {
   manager: "Store Manager",
 };
 
-/** Demo-only role switch (research preview). Live mode uses real permissions. */
+/** Demo-only role switch. Only meaningful in demo-data mode. */
 function DemoRoleToggle() {
   const { role, setRole } = useSession();
   return (
@@ -23,7 +23,7 @@ function DemoRoleToggle() {
           className={cn(
             "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
             role === r
-              ? "bg-card text-navy-900 shadow-sm"
+              ? "bg-card text-brand-900 shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           )}
         >
@@ -34,17 +34,49 @@ function DemoRoleToggle() {
   );
 }
 
+/** Switch between live Smart Inspect data and the mock Wegmans demo portfolio. */
+function DataModeToggle() {
+  const { demoData, setDemoData } = useSession();
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
+      <button
+        onClick={() => setDemoData(false)}
+        className={cn(
+          "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+          !demoData
+            ? "bg-card text-brand-900 shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Live
+      </button>
+      <button
+        onClick={() => setDemoData(true)}
+        className={cn(
+          "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+          demoData
+            ? "bg-card text-brand-900 shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        Demo
+      </button>
+    </div>
+  );
+}
+
 export function TopBar() {
-  const { dateRange, setDateRange } = useSession();
+  const { dateRange, setDateRange, demoData } = useSession();
   const { userName } = useSmartInspectPermissions();
 
   return (
     <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-border bg-card/80 px-4 py-3 backdrop-blur md:px-6">
-      <div className="mr-auto flex items-center gap-2">
+      <div className="mr-auto flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Demo view
+          Data
         </span>
-        <DemoRoleToggle />
+        <DataModeToggle />
+        {demoData && <DemoRoleToggle />}
       </div>
 
       <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5">

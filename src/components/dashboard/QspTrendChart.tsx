@@ -63,9 +63,9 @@ export function QspTrendChart({
         <Line
           type="monotone"
           dataKey="qspScore"
-          stroke="#0f1c3f"
+          stroke="#006938"
           strokeWidth={2.5}
-          dot={{ r: 3, fill: "#0f1c3f" }}
+          dot={{ r: 3, fill: "#006938" }}
           activeDot={{ r: 5 }}
         />
       </LineChart>

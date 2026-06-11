@@ -33,7 +33,7 @@ export function TopDeficienciesList({
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-navy-900"
+              className="h-full rounded-full bg-brand-900"
               style={{ width: `${(d.count / max) * 100}%` }}
             />
           </div>

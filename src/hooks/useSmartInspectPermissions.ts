@@ -12,10 +12,10 @@ export type AccessMode = "portfolio" | "group" | "store";
  *  - a single store        -> store manager dashboard
  */
 export function useSmartInspectPermissions() {
-  const { role } = useSession();
+  const { role, demoData } = useSession();
 
   const query = useQuery({
-    queryKey: ["permissions", role],
+    queryKey: ["permissions", role, demoData],
     queryFn: () => getPermissions(role),
   });
 
