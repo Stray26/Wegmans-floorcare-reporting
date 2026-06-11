@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -5,10 +6,32 @@ import {
   FileBarChart,
   Ticket,
   SlidersHorizontal,
-  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
+
+/**
+ * Wegmans wordmark. Renders the brand logo from /wegmans-logo.png (drop the
+ * file in /public). The black wordmark is inverted to white for the green
+ * sidebar. Falls back to a text wordmark if the image isn't present.
+ */
+function BrandLogo() {
+  const [ok, setOk] = useState(true);
+  if (!ok) {
+    return (
+      <p className="text-xl font-bold tracking-tight text-white">Wegmans</p>
+    );
+  }
+  return (
+    <img
+      src="/wegmans-logo.png"
+      alt="Wegmans"
+      onError={() => setOk(false)}
+      className="h-7 w-auto"
+      style={{ filter: "brightness(0) invert(1)" }}
+    />
+  );
+}
 
 interface NavItem {
   to: string;
@@ -52,14 +75,9 @@ export function Sidebar() {
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col bg-brand-900 text-white md:flex">
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15">
-          <ShieldCheck className="h-5 w-5 text-white" />
-        </div>
-        <div className="leading-tight">
-          <p className="text-sm font-semibold">Wegmans</p>
-          <p className="text-[11px] text-white/60">Floorcare Compliance</p>
-        </div>
+      <div className="px-5 py-5">
+        <BrandLogo />
+        <p className="mt-1.5 text-[11px] text-white/60">Floorcare Compliance</p>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">
