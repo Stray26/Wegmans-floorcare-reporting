@@ -1,25 +1,24 @@
-import { Download, RefreshCw } from "lucide-react";
+import { Download, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageShell";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ScoreGauge } from "@/components/dashboard/ScoreGauge";
 import { QspTrendChart } from "@/components/dashboard/QspTrendChart";
 import { TopDeficienciesList } from "@/components/dashboard/TopDeficienciesList";
-import { CheckAreaTable } from "@/components/reports/CheckAreaTable";
+import { DateRangePicker } from "@/components/dashboard/DateRangePicker";
+import { CheckAreaAccordion } from "@/components/reports/CheckAreaAccordion";
+import { InspectionHistoryTable } from "@/components/reports/InspectionHistoryTable";
 import { PhotoGallery } from "@/components/reports/PhotoGallery";
 import { TicketsTable } from "@/components/reports/TicketsTable";
+import { CreateTicketDialog } from "@/components/reports/CreateTicketDialog";
 import { useToast } from "@/components/ui/toast";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import { useStoreReport } from "@/hooks/useStoreReport";
-import { formatRelativeDays } from "@/utils/formatting";
+import { formatRelativeDays, formatDateTime } from "@/utils/formatting";
 
 export function StoreManagerDashboard() {
   const { stores } = useSmartInspectPermissions();
@@ -56,6 +55,7 @@ export function StoreManagerDashboard() {
   const attentionAreas = [...store.checkAreas]
     .filter((c) => c.status !== "passed")
     .sort((a, b) => a.qspScore - b.qspScore);
+  const actionItemCount = store.deficiencies.filter((d) => d.count > 0).length;
 
   return (
     <div className="pb-6">
@@ -64,7 +64,7 @@ export function StoreManagerDashboard() {
         subtitle={`${store.storeName} · ${store.configurationName}`}
         actions={
           <>
-            <StatusBadge status={store.status} className="hidden sm:inline-flex" />
+            <DateRangePicker className="hidden sm:inline-flex" />
             <Button
               variant="outline"
               size="sm"
@@ -73,9 +73,7 @@ export function StoreManagerDashboard() {
                 toast({ title: "Refreshed", description: "Latest data loaded." });
               }}
             >
-              <RefreshCw
-                className={isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"}
-              />
+              <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
               Refresh
             </Button>
             <Button
@@ -95,39 +93,67 @@ export function StoreManagerDashboard() {
         }
       />
 
-      {/* KPI cards — action oriented */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <Card className="flex items-center justify-center p-3">
-          <ScoreGauge score={store.qspScore} size={96} />
-        </Card>
-        <KpiCard label="Status" value="" status={store.status}
-          hint={store.uploaded ? "Inspection uploaded" : "No upload in range"} />
-        <KpiCard
-          label="Last Uploaded"
-          value={formatRelativeDays(store.lastUploadedAt)}
-        />
-        <KpiCard label="Inspections" value={store.inspectionsCompleted} />
-        <KpiCard
-          label="Open Action Items"
-          value={store.deficiencies.filter((d) => d.count > 0).length}
-        />
-        <KpiCard label="Open Tickets" value={store.openTicketCount} />
+      <div className="mb-4 sm:hidden">
+        <DateRangePicker />
       </div>
 
-      {/* Main sections */}
+      {/* Did we upload? Did we pass? */}
+      <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+        <Card className="flex flex-col items-center justify-center gap-3 p-6">
+          <ScoreGauge score={store.qspScore} size={120} />
+          <StatusBadge status={store.status} />
+        </Card>
+
+        <div className="space-y-3">
+          {/* Upload banner */}
+          <Card
+            className={cn(
+              "flex items-center gap-3 p-4",
+              store.uploaded
+                ? "border-status-passed/30 bg-status-passed-bg/40"
+                : "border-status-notuploaded/30 bg-status-notuploaded-bg"
+            )}
+          >
+            {store.uploaded ? (
+              <CheckCircle2 className="h-6 w-6 shrink-0 text-status-passed" />
+            ) : (
+              <AlertTriangle className="h-6 w-6 shrink-0 text-status-notuploaded" />
+            )}
+            <div>
+              <p className="font-semibold text-foreground">
+                {store.uploaded ? "Inspection uploaded" : "No inspection in range"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {store.uploaded
+                  ? `Last upload ${formatDateTime(store.lastUploadedAt)} · ${formatRelativeDays(store.lastUploadedAt)}`
+                  : "Nothing has been uploaded for the selected date range."}
+              </p>
+            </div>
+          </Card>
+
+          {/* Quick KPIs */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <KpiCard label="Inspections" value={store.inspectionsCompleted} />
+            <KpiCard label="Action Items" value={actionItemCount} status={actionItemCount ? "needs-improvement" : "passed"} />
+            <KpiCard label="Open Tickets" value={store.openTicketCount} />
+            <KpiCard label="Deficiencies" value={store.deficiencyCount} />
+          </div>
+        </div>
+      </div>
+
+      {/* What do I fix? */}
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
             <CardTitle>Check Areas Needing Attention</CardTitle>
+            <CreateTicketDialog stores={stores} defaultStore={store.storeName} />
           </CardHeader>
           <CardContent className="pt-0">
-            {attentionAreas.length > 0 ? (
-              <CheckAreaTable checkAreas={attentionAreas} />
-            ) : (
-              <p className="py-8 text-center text-sm text-status-passed">
-                All check areas are passing. Nice work.
-              </p>
-            )}
+            <CheckAreaAccordion
+              areas={attentionAreas}
+              storeName={store.storeName}
+              photos={store.photos}
+            />
           </CardContent>
         </Card>
 
@@ -141,6 +167,7 @@ export function StoreManagerDashboard() {
         </Card>
       </div>
 
+      {/* Are we improving? */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -152,22 +179,33 @@ export function StoreManagerDashboard() {
         </Card>
         <Card>
           <CardHeader>
+            <CardTitle>Recent Inspections</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <InspectionHistoryTable history={store.history} limit={6} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Photos + tickets */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
             <CardTitle>Recent Photos</CardTitle>
           </CardHeader>
           <CardContent>
             <PhotoGallery photos={store.photos.slice(0, 6)} />
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Tickets & Follow-up</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <TicketsTable tickets={store.tickets} />
+          </CardContent>
+        </Card>
       </div>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Tickets & Follow-up</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <TicketsTable tickets={store.tickets} />
-        </CardContent>
-      </Card>
     </div>
   );
 }
