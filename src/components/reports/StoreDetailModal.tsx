@@ -1,4 +1,5 @@
-import { Download, MapPin } from "lucide-react";
+import { Download, MapPin, LayoutDashboard } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,7 @@ export function StoreDetailModal({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const open = !!store;
 
   const exportPdf = () =>
@@ -88,6 +90,17 @@ export function StoreDetailModal({
                 </p>
                 <StatusBadge status={store.status} />
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigate(`/my-store?store=${store.storeId}`);
+                  onClose();
+                }}
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Open dashboard
+              </Button>
               <Button variant="outline" size="sm" onClick={exportPdf}>
                 <Download className="h-4 w-4" />
                 PDF

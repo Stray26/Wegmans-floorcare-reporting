@@ -26,10 +26,11 @@ const NAV: NavItem[] = [
     modes: ["portfolio", "group"],
   },
   {
+    // Single-store users land here ("My Store"); multi-store users use it as a
+    // per-store dashboard via the store switcher in the header.
     to: "/my-store",
-    label: "My Store",
+    label: "Store View",
     icon: <Store className="h-4 w-4" />,
-    modes: ["store"],
   },
   {
     to: "/report",

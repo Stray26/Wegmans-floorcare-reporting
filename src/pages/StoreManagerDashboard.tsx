@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Download, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageShell";
@@ -22,16 +24,26 @@ import { formatRelativeDays, formatDateTime } from "@/utils/formatting";
 
 export function StoreManagerDashboard() {
   const { stores } = useSmartInspectPermissions();
-  const store0 = stores[0] ?? null;
+  const [params, setParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(
+    params.get("store")
+  );
+  const selectedStore =
+    stores.find((s) => s.buildingId === selectedId) ?? stores[0] ?? null;
   const {
     data: store,
     isLoading,
     isFetching,
     isError,
     error,
-  } = useStoreReport(store0);
+  } = useStoreReport(selectedStore);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const changeStore = (id: string) => {
+    setSelectedId(id);
+    setParams({ store: id }, { replace: true });
+  };
 
   if (isError) {
     return (
@@ -64,6 +76,20 @@ export function StoreManagerDashboard() {
         subtitle={`${store.storeName} · ${store.configurationName}`}
         actions={
           <>
+            {stores.length > 1 && (
+              <select
+                value={selectedStore?.buildingId ?? ""}
+                onChange={(e) => changeStore(e.target.value)}
+                className="h-9 max-w-[200px] rounded-md border border-input bg-card px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Select store"
+              >
+                {stores.map((s) => (
+                  <option key={s.buildingId} value={s.buildingId}>
+                    {s.storeName}
+                  </option>
+                ))}
+              </select>
+            )}
             <DateRangePicker className="hidden sm:inline-flex" />
             <Button
               variant="outline"
