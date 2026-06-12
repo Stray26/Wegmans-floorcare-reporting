@@ -43,3 +43,7 @@ probe-output/
 si-curl.txt
 si-login-curl.txt
 *.har
+
+# TypeScript incremental build info
+*.tsbuildinfo
+.env.vercel-check

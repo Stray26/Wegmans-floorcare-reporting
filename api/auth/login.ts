@@ -61,26 +61,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const sealed = sealSession({
-    siSessionToken: si.sessionToken,
-    memberId: si.member.id,
-    companyId: COMPANY_ID,
-    roleId: membership.roleId,
-    displayName: si.member.displayName ?? username,
-    email: si.member.email ?? username,
-    permissionLevels: membership.permissionLevels ?? {},
-  });
-  setSessionCookie(res, sealed);
-  res.status(200).json({
-    user: publicIdentity({
-      siSessionToken: "",
+  // Sealing/cookie can throw (e.g. missing SESSION_SECRET) — return a clean 500
+  // rather than crashing the function process.
+  try {
+    const sealed = sealSession({
+      siSessionToken: si.sessionToken,
       memberId: si.member.id,
       companyId: COMPANY_ID,
       roleId: membership.roleId,
       displayName: si.member.displayName ?? username,
       email: si.member.email ?? username,
       permissionLevels: membership.permissionLevels ?? {},
-      exp: 0,
-    }),
-  });
+    });
+    setSessionCookie(res, sealed);
+    res.status(200).json({
+      user: publicIdentity({
+        siSessionToken: "",
+        memberId: si.member.id,
+        companyId: COMPANY_ID,
+        roleId: membership.roleId,
+        displayName: si.member.displayName ?? username,
+        email: si.member.email ?? username,
+        permissionLevels: membership.permissionLevels ?? {},
+        exp: 0,
+      }),
+    });
+  } catch (err) {
+    const e = err as Error & { statusCode?: number };
+    res.status(e.statusCode ?? 500).json({ error: e.message ?? "Sign-in failed." });
+  }
 }

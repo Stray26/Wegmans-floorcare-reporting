@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "//": "SPA fallback rewrite excludes /api, Vite dev virtual paths (@, src/, node_modules/) and any dotted asset path, so `vercel dev` serves JS/HMR instead of index.html. No prod impact: real files are served before rewrites and client routes contain no dots.",
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|@|src/|node_modules/|.*\\.).*)", "destination": "/index.html" }
   ]
 }
