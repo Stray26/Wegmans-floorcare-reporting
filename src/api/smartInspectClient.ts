@@ -65,8 +65,14 @@ async function proxy<T>(endpoint: string, body: Record<string, unknown>): Promis
   const res = await fetch("/api/smart-inspect", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ endpoint, ...body }),
   });
+  // Session missing/expired: bounce to sign-in (mock mode never reaches here).
+  if (res.status === 401 && !isMockMode()) {
+    window.location.assign("/login");
+    throw new Error("Not signed in.");
+  }
   const data = await res.json();
   if (!res.ok || data?.error) {
     throw new Error(data?.error ?? `Smart Inspect proxy error ${res.status}`);

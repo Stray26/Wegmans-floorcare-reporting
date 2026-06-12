@@ -88,10 +88,27 @@ Wegmans constants centralized in `src/config/wegmans.ts` (10 bilingual check are
 - `inspection.allRecords` returns `{ records: [...], total }` — NOT a bare array. `ticket.getTickets` wraps similarly. `widgetArray()` in the client unwraps `records`/`tickets`/`data`/bare.
 - Record fields: `checkmark` (long text, numbered "01.…"), `checkAttribute` ("Acceptable" / "Buildup" …), `isGood` (true→100/false→0/null→50), `outerTierId`, `count`. Live rows omit `configId`/`state`.
 
+## Auth (feature/si-login)
+
+Users sign in with their **Smart Inspect credentials**. `/api/auth/login` calls SI's
+internal `POST /startSession` (see `docs/si-internal-api.md` — undocumented internal API,
+SI blessing pending), verifies membership in companyId 1382, and seals the user's SIQ-0
+session token + memberId + roleId + permissionLevels into an AES-256-GCM httpOnly cookie
+(`api/_lib/session.ts`, 12h TTL, `SESSION_SECRET` env). The browser never sees any SI token.
+Pieces: `/api/auth/{login,logout,me}`, `src/context/AuthContext.tsx`, `src/pages/Login.tsx`,
+`RequireAuth` in `App.tsx`. **Demo mode bypasses auth entirely** (so `npm run dev` works).
+`/api/smart-inspect` now requires a session (401 → client redirects to /login):
+`getPermissions` runs AS THE USER (their SIQ-0 token + memberId → their stores), data calls
+stay on the company SIQ-1 token but requested outer tiers are validated against the USER's
+permissions. The permissions query key includes memberId so a re-login never sees the
+previous user's cache. `createTicket` additionally checks the user's `canTicket` flag.
+
 ## Env vars
 
 Server-side (no `VITE_` prefix, never in browser): `SMART_INSPECT_API_TOKEN`,
-`SMART_INSPECT_API_BASE_URL` (defaults to the prod URL).
+`SMART_INSPECT_API_BASE_URL` (defaults to the prod URL), `SESSION_SECRET`
+(session-cookie encryption; generate with `openssl rand -base64 32`),
+`SMART_INSPECT_COMPANY_ID` (default 1382 = Wegmans).
 Frontend: `VITE_ENABLE_MOCK_DATA` (`false` in prod), `VITE_APP_ENV`.
 All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also writes a `VERCEL_OIDC_TOKEN` there).
 

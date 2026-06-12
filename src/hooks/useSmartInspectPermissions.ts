@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getPermissions, permittedStores } from "@/api/smartInspectClient";
 import { useSession } from "@/context/SessionContext";
+import { useAuth } from "@/context/AuthContext";
 import type { StoreMeta } from "@/api/reportingTransforms";
 
 export type AccessMode = "portfolio" | "group" | "store";
@@ -13,9 +14,12 @@ export type AccessMode = "portfolio" | "group" | "store";
  */
 export function useSmartInspectPermissions() {
   const { role, demoData } = useSession();
+  const { user } = useAuth();
 
   const query = useQuery({
-    queryKey: ["permissions", role, demoData],
+    // memberId in the key: a different sign-in must never see the previous
+    // user's cached permissions. (null in demo mode.)
+    queryKey: ["permissions", role, demoData, user?.memberId ?? null],
     queryFn: () => getPermissions(role),
   });
 

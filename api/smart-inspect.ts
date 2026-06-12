@@ -2,19 +2,36 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   siPost,
   ENDPOINT_PATHS,
-  getAllowedOuterTierNames,
+  outerTierNamesFrom,
+  getUserPermissions,
   reconcileOuterTiers,
 } from "./_lib/smartInspect.js";
+import { readSession, type PortalSession } from "./_lib/session.js";
 
 /**
- * POST /api/smart-inspect — single dispatcher for all Smart Inspect calls,
- * mirroring the documented edge function. Routes by the `endpoint` field, adds
- * SIQ-1 auth server-side, and enforces store-level permissions BEFORE
- * forwarding (server-side enforcement, not just hidden UI).
+ * POST /api/smart-inspect — single dispatcher for all Smart Inspect calls.
  *
- * Body: { endpoint: "runWidgets" | "getPermissions" | "getconfig" |
- *         "configurations" | "listTags" | "createTicket" | "getTicket", ... }
+ * Auth model (see docs/si-internal-api.md):
+ *  - Every call requires a signed-in portal session (httpOnly cookie from
+ *    /api/auth/login). No session → 401. Demo mode never hits this proxy.
+ *  - `getPermissions` runs AS THE USER (their SIQ-0 token + memberId), so the
+ *    response is that member's stores — Smart Inspect stays the source of truth.
+ *  - Data endpoints (runWidgets, tickets, …) use the company SIQ-1 token (its
+ *    request shapes are the documented, production-proven ones) but the proxy
+ *    first validates the requested stores against THE USER's permissions —
+ *    server-side enforcement, not just hidden UI.
  */
+
+/** The user's permitted store names, via their own SI session. */
+async function userAllowedStores(session: PortalSession): Promise<Set<string>> {
+  const perms = await getUserPermissions(
+    session.siSessionToken,
+    session.companyId,
+    session.memberId
+  );
+  return outerTierNamesFrom(perms);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -22,6 +39,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const session = readSession(req);
+    if (!session) {
+      res.status(401).json({ error: "Not signed in." });
+      return;
+    }
+
     const { endpoint, ...body } = req.body ?? {};
     const path = ENDPOINT_PATHS[endpoint as string];
     if (!path) {
@@ -29,9 +52,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // runWidgets: validate/inject the permitted outer tiers in the filters.
+    // Permissions: per-user, straight from the member's own SI session.
+    if (endpoint === "getPermissions") {
+      const data = await getUserPermissions(
+        session.siSessionToken,
+        session.companyId,
+        session.memberId
+      );
+      res.status(200).json(data);
+      return;
+    }
+
+    // runWidgets: validate/inject the USER's permitted outer tiers.
     if (endpoint === "runWidgets") {
-      const allowed = await getAllowedOuterTierNames();
+      const allowed = await userAllowedStores(session);
       const filters = (body.filters ?? {}) as {
         outerTiers?: string[];
         [k: string]: unknown;
@@ -42,9 +76,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // createTicket: ensure the target store is permitted.
+    // createTicket: capability + store both checked against the user.
     if (endpoint === "createTicket") {
-      const allowed = await getAllowedOuterTierNames();
+      if (session.permissionLevels?.canTicket === false) {
+        res.status(403).json({ error: "Your account is not allowed to create tickets." });
+        return;
+      }
+      const allowed = await userAllowedStores(session);
       const building = (body.ticket ?? {}).building as string | undefined;
       reconcileOuterTiers(allowed, building ? [building] : []);
       const data = await siPost(path, body);
@@ -52,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // getPermissions, getconfig, configurations, listTags, getTicket: pass through.
+    // getconfig, configurations, listTags, getTicket: authenticated pass-through.
     const data = await siPost(path, body);
     res.status(200).json(data);
   } catch (err) {

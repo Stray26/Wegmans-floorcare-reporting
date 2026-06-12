@@ -11,6 +11,9 @@
 const BASE_URL =
   process.env.SMART_INSPECT_API_BASE_URL ?? "https://app.mysmartinspect.com/api";
 
+/** The Smart Inspect company this portal serves (Wegmans). */
+export const COMPANY_ID = Number(process.env.SMART_INSPECT_COMPANY_ID ?? 1382);
+
 function token(): string {
   const t = process.env.SMART_INSPECT_API_TOKEN ?? process.env.VITE_SMART_INSPECT_API_TOKEN;
   if (!t) {
@@ -33,12 +36,18 @@ export const ENDPOINT_PATHS: Record<string, string> = {
   getTicket: "/getTicket",
 };
 
-export async function siPost<T>(path: string, body: unknown): Promise<T> {
+/**
+ * POST with an explicit Authorization value. Two schemes exist:
+ *  - `SIQ-1 <apiToken>`     — the documented integration API token
+ *  - `SIQ-0 <sessionToken>` — a per-user web session (from /startSession;
+ *    use `SIQ-0 null` for the login call itself). See docs/si-internal-api.md.
+ */
+export async function siPostWith<T>(authorization: string, path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `SIQ-1 ${token()}`,
+      authorization,
     },
     body: JSON.stringify(body ?? {}),
   });
@@ -54,6 +63,11 @@ export async function siPost<T>(path: string, body: unknown): Promise<T> {
     throw Object.assign(new Error(msg), { statusCode: res.status });
   }
   return data as T;
+}
+
+/** POST using the company SIQ-1 integration token (legacy/default path). */
+export async function siPost<T>(path: string, body: unknown): Promise<T> {
+  return siPostWith<T>(`SIQ-1 ${token()}`, path, body);
 }
 
 /* ----------------------------- permissions ----------------------------- */
@@ -73,21 +87,49 @@ interface PermissionsResponse {
   permissions: Permission | Permission[];
 }
 
-/** Fetch the caller's permitted store (outer tier) names — the source of truth. */
-export async function getAllowedOuterTierNames(): Promise<Set<string>> {
-  const resp = await siPost<PermissionsResponse>("/getPermissions", {
-    permissionType: "Access",
-  });
+/** Flatten a getPermissions response into the set of permitted store names. */
+export function outerTierNamesFrom(resp: PermissionsResponse): Set<string> {
   const perms = Array.isArray(resp.permissions) ? resp.permissions : [resp.permissions];
   const names = new Set<string>();
   for (const p of perms) {
-    for (const cfg of p.permissionConfigs ?? []) {
+    for (const cfg of p?.permissionConfigs ?? []) {
       for (const ot of cfg.permissionOuterTiers ?? []) {
         if (ot?.name) names.add(ot.name);
       }
     }
   }
   return names;
+}
+
+/** Permitted store names for the company API token (token-assigned member). */
+export async function getAllowedOuterTierNames(): Promise<Set<string>> {
+  const resp = await siPost<PermissionsResponse>("/getPermissions", {
+    permissionType: "Access",
+  });
+  return outerTierNamesFrom(resp);
+}
+
+/**
+ * Per-user permissions via the member's own SIQ-0 session (companyId AND
+ * memberId are required — see docs/si-internal-api.md). Any failure here means
+ * the SI session is no longer valid → treat as logged out (statusCode 401).
+ */
+export async function getUserPermissions(
+  siSessionToken: string,
+  companyId: number,
+  memberId: number
+): Promise<PermissionsResponse> {
+  try {
+    return await siPostWith<PermissionsResponse>(
+      `SIQ-0 ${siSessionToken}`,
+      "/getPermissions",
+      { permissionType: "Access", companyId, memberId }
+    );
+  } catch {
+    throw Object.assign(new Error("Your session has expired. Please sign in again."), {
+      statusCode: 401,
+    });
+  }
 }
 
 /**

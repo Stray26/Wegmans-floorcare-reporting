@@ -1,9 +1,12 @@
-import { CalendarDays, UserCircle2 } from "lucide-react";
+import { CalendarDays, LogOut, UserCircle2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
+import { useAuth } from "@/context/AuthContext";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import type { DemoRole } from "@/api/mockData";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const ROLE_LABELS: Record<DemoRole, string> = {
   boss: "Corporate",
@@ -68,6 +71,16 @@ function DataModeToggle() {
 export function TopBar() {
   const { dateRange, setDateRange, demoData } = useSession();
   const { userName } = useSmartInspectPermissions();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const displayName = user?.displayName || userName || "Demo user";
+  const subtitle = user ? (user.roleId || user.email) : demoData ? "Demo data" : "Smart Inspect";
+
+  async function onSignOut() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-border bg-card/80 px-4 py-3 backdrop-blur md:px-6">
@@ -101,9 +114,20 @@ export function TopBar() {
       <div className="flex items-center gap-2 pl-1">
         <UserCircle2 className="h-7 w-7 text-muted-foreground" />
         <div className="hidden leading-tight sm:block">
-          <p className="text-xs font-semibold text-foreground">{userName}</p>
-          <p className="text-[11px] text-muted-foreground">Smart Inspect</p>
+          <p className="text-xs font-semibold text-foreground">{displayName}</p>
+          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
+        {!demoData && user && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Sign out"
+            aria-label="Sign out"
+            onClick={onSignOut}
+          >
+            <LogOut className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        )}
       </div>
     </header>
   );
