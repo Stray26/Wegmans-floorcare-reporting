@@ -37,3 +37,9 @@ pnpm-debug.log*
 install.out
 install.status
 .env*
+
+# SI API probe artifacts
+probe-output/
+si-curl.txt
+si-login-curl.txt
+*.har
