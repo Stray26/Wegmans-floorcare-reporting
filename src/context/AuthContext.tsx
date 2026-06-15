@@ -21,6 +21,8 @@ export interface PortalUser {
   displayName: string;
   email: string;
   permissionLevels: Record<string, boolean | number>;
+  /** Report-admin: may configure scheduled-report recipients + cadence. */
+  isAdmin?: boolean;
 }
 
 interface AuthContextValue {

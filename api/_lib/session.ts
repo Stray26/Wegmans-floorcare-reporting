@@ -96,6 +96,25 @@ export function clearSessionCookie(res: VercelResponse): void {
   );
 }
 
+/**
+ * Report-admin allowlist (lowercased emails). Seeded with the initial admin so
+ * it works without extra config; extend via REPORT_ADMIN_EMAILS (comma-separated).
+ * Admins can configure scheduled-report recipients + cadence.
+ */
+const DEFAULT_ADMIN_EMAILS = ["vmaione@mysmartinspect.com"];
+export function adminEmails(): string[] {
+  const fromEnv = (process.env.REPORT_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return [...new Set([...DEFAULT_ADMIN_EMAILS, ...fromEnv])];
+}
+
+/** True if the session's email is on the report-admin allowlist. */
+export function isAdminSession(s: PortalSession | null): boolean {
+  return !!s?.email && adminEmails().includes(s.email.toLowerCase());
+}
+
 /** The shape we expose to the browser — NO token. */
 export function publicIdentity(s: PortalSession) {
   return {
@@ -105,5 +124,6 @@ export function publicIdentity(s: PortalSession) {
     displayName: s.displayName,
     email: s.email,
     permissionLevels: s.permissionLevels,
+    isAdmin: isAdminSession(s),
   };
 }

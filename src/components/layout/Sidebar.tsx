@@ -6,6 +6,7 @@ import {
   FileBarChart,
   Ticket,
   SlidersHorizontal,
+  Mail,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,8 @@ interface NavItem {
   icon: React.ReactNode;
   /** show only for these access modes */
   modes?: ("portfolio" | "group" | "store")[];
+  /** show only to report admins */
+  adminOnly?: boolean;
 }
 
 const NAV: NavItem[] = [
@@ -71,13 +74,23 @@ const NAV: NavItem[] = [
     icon: <SlidersHorizontal className="h-4 w-4" />,
     modes: ["portfolio", "group"],
   },
+  {
+    to: "/settings/reports",
+    label: "Report Emails",
+    icon: <Mail className="h-4 w-4" />,
+    adminOnly: true,
+  },
 ];
 
 export function Sidebar() {
   const { accessMode } = useSmartInspectPermissions();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const items = NAV.filter((n) => !n.modes || n.modes.includes(accessMode));
+  const items = NAV.filter(
+    (n) =>
+      (!n.modes || n.modes.includes(accessMode)) &&
+      (!n.adminOnly || user?.isAdmin)
+  );
 
   async function onSignOut() {
     await logout();

@@ -104,3 +104,78 @@ export async function markSubscriptionSent(id: string): Promise<void> {
     .update({ last_sent_at: new Date().toISOString() })
     .eq("id", id);
 }
+
+/* --------------------- admin: manage subscriptions --------------------- */
+
+export interface SubscriptionInput {
+  id?: string;
+  email: string;
+  member_id?: string | null;
+  frequency: ReportFrequency;
+  enabled?: boolean;
+  weekly_dow?: number | null;
+  monthly_dom?: number | null;
+  send_hour?: number;
+}
+
+export async function listSubscriptions(): Promise<SubscriptionRow[]> {
+  const db = getSupabaseAdmin();
+  if (!db) return [];
+  const { data, error } = await db
+    .from("report_subscriptions")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("report_subscriptions list failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as SubscriptionRow[];
+}
+
+export async function upsertSubscription(input: SubscriptionInput): Promise<SubscriptionRow> {
+  const db = getSupabaseAdmin();
+  if (!db) throw new Error("Supabase is not configured.");
+  const fields = {
+    email: input.email.trim(),
+    member_id: input.member_id ?? null,
+    frequency: input.frequency,
+    enabled: input.enabled ?? true,
+    weekly_dow: input.weekly_dow ?? null,
+    monthly_dom: input.monthly_dom ?? null,
+    ...(input.send_hour != null ? { send_hour: input.send_hour } : {}),
+  };
+  const { data, error } = input.id
+    ? await db.from("report_subscriptions").update(fields).eq("id", input.id).select()
+    : await db.from("report_subscriptions").insert(fields).select();
+  if (error) throw new Error(error.message);
+  return (data?.[0] ?? null) as SubscriptionRow;
+}
+
+export async function deleteSubscription(id: string): Promise<void> {
+  const db = getSupabaseAdmin();
+  if (!db) throw new Error("Supabase is not configured.");
+  const { error } = await db.from("report_subscriptions").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export interface RecipientSummary {
+  member_id: string;
+  email: string;
+  display_name: string | null;
+  stores: RecipientStore[];
+  captured_at: string;
+}
+
+export async function listRecipients(): Promise<RecipientSummary[]> {
+  const db = getSupabaseAdmin();
+  if (!db) return [];
+  const { data, error } = await db
+    .from("report_recipients")
+    .select("member_id,email,display_name,stores,captured_at")
+    .order("captured_at", { ascending: false });
+  if (error) {
+    console.warn("report_recipients list failed:", error.message);
+    return [];
+  }
+  return (data ?? []) as RecipientSummary[];
+}

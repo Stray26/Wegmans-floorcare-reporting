@@ -10,6 +10,7 @@ import { StoreManagerDashboard } from "@/pages/StoreManagerDashboard";
 import { CustomDetailReport } from "@/pages/CustomDetailReport";
 import { TicketsPage } from "@/pages/TicketsPage";
 import { ScoreSettings } from "@/pages/ScoreSettings";
+import { ReportSettings } from "@/pages/ReportSettings";
 
 /** The home route for an access mode. Single-store users belong on Store Manager. */
 function homeFor(accessMode: string): string {
@@ -58,6 +59,14 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Admin-only routes (report-email config). Non-admins are bounced home. */
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (!user?.isAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -82,6 +91,14 @@ export default function App() {
         <Route path="/report" element={<CustomDetailReport />} />
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/settings/scores" element={<ScoreSettings />} />
+        <Route
+          path="/settings/reports"
+          element={
+            <RequireAdmin>
+              <ReportSettings />
+            </RequireAdmin>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
