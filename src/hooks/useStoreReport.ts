@@ -9,7 +9,14 @@ export function useStoreReport(store: StoreMeta | null) {
   const { thresholds } = useScoreThresholds();
 
   return useQuery({
-    queryKey: ["store", store?.buildingId, dateRange, thresholds, demoData],
+    queryKey: [
+      "store",
+      store?.configName ?? null,
+      store?.buildingId,
+      dateRange,
+      thresholds,
+      demoData,
+    ],
     queryFn: () => getStoreReport(store as StoreMeta, dateRange, thresholds),
     enabled: !!store,
   });

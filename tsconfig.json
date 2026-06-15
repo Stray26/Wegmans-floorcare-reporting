@@ -3,5 +3,10 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ]
+  ],
+  "// note": "baseUrl+paths live here (not only in tsconfig.app.json) so the Vercel /api function bundler (esbuild reads the ROOT tsconfig) also resolves '@/' — this lets serverless functions reuse the src/ transforms and PDF layout.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  }
 }

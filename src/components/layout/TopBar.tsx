@@ -1,12 +1,12 @@
-import { CalendarDays, LogOut, UserCircle2 } from "lucide-react";
+import { LogOut, UserCircle2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
 import { useAuth } from "@/context/AuthContext";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import type { DemoRole } from "@/api/mockData";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/dashboard/DateRangePicker";
 
 const ROLE_LABELS: Record<DemoRole, string> = {
   boss: "Corporate",
@@ -69,7 +69,7 @@ function DataModeToggle() {
 }
 
 export function TopBar() {
-  const { dateRange, setDateRange, demoData } = useSession();
+  const { demoData } = useSession();
   const { userName } = useSmartInspectPermissions();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -92,24 +92,7 @@ export function TopBar() {
         {demoData && <DemoRoleToggle />}
       </div>
 
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5">
-        <CalendarDays className="h-4 w-4 text-muted-foreground" />
-        <Input
-          type="date"
-          value={dateRange.start}
-          onChange={(e) =>
-            setDateRange({ ...dateRange, start: e.target.value })
-          }
-          className="h-7 w-[130px] border-0 px-1 shadow-none focus-visible:ring-0"
-        />
-        <span className="text-muted-foreground">–</span>
-        <Input
-          type="date"
-          value={dateRange.end}
-          onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-          className="h-7 w-[130px] border-0 px-1 shadow-none focus-visible:ring-0"
-        />
-      </div>
+      <DateRangePicker />
 
       <div className="flex items-center gap-2 pl-1">
         <UserCircle2 className="h-7 w-7 text-muted-foreground" />
@@ -117,7 +100,9 @@ export function TopBar() {
           <p className="text-xs font-semibold text-foreground">{displayName}</p>
           <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
-        {!demoData && user && (
+        {/* Show whenever a real session exists — even in Demo mode, so a
+            logged-in user can always sign out. */}
+        {user && (
           <Button
             variant="ghost"
             size="icon"

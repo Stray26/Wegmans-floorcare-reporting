@@ -1,62 +1,27 @@
 import * as React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Ticket, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { PhotoGallery } from "@/components/reports/PhotoGallery";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
-import { createTicket } from "@/api/smartInspectClient";
 import { formatScore } from "@/utils/formatting";
-import { CHECK_AREAS } from "@/config/wegmans";
+import { useSession } from "@/context/SessionContext";
 import type { CheckAreaReport, PhotoReport } from "@/types/reporting";
-
-/** Map an english area name back to its bilingual label for ticket payloads. */
-function bilingualFor(areaName: string, fallback: string): string {
-  const m = CHECK_AREAS.find(
-    (ca) => ca.label.split("/")[0].trim() === areaName
-  );
-  return m?.label ?? fallback;
-}
 
 function AreaRow({
   area,
-  storeName,
   photos,
 }: {
   area: CheckAreaReport;
-  storeName: string;
   photos: PhotoReport[];
 }) {
   const [open, setOpen] = React.useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const { dateRange } = useSession();
+  // A single-day range (e.g. Today) is one inspection, so each area is simply
+  // pass/fail — let the status chip speak rather than show a 0%/100% "score".
+  const singleDay = dateRange.start === dateRange.end;
 
   const areaPhotos = photos.filter((p) => p.checkAreaName === area.checkAreaName);
   const defTotal = area.deficiencyBreakdown.reduce((s, d) => s + d.count, 0) || 1;
-
-  const mutation = useMutation({
-    mutationFn: (deficiency: string) =>
-      createTicket({
-        storeName,
-        areaName: bilingualFor(area.checkAreaName, area.bilingualLabel),
-        deficiency,
-      }),
-    onSuccess: (res, deficiency) => {
-      toast({
-        title: "Ticket created",
-        description: `${res.ticketId} · ${deficiency} in ${area.checkAreaName}`,
-        variant: "success",
-      });
-      queryClient.invalidateQueries({ queryKey: ["tickets"] });
-      queryClient.invalidateQueries({ queryKey: ["store"] });
-    },
-    onError: (err) =>
-      toast({
-        title: "Couldn’t create ticket",
-        description: (err as Error)?.message ?? "Unknown error",
-      }),
-  });
 
   return (
     <div className="border-b border-border last:border-0">
@@ -76,9 +41,11 @@ function AreaRow({
         <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
           {area.deficiencyCount} def
         </span>
-        <span className="w-16 shrink-0 text-right font-semibold tabular-nums">
-          {formatScore(area.qspScore)}
-        </span>
+        {!singleDay && (
+          <span className="w-16 shrink-0 text-right font-semibold tabular-nums">
+            {formatScore(area.qspScore)}
+          </span>
+        )}
         <StatusBadge status={area.status} showDot={false} className="shrink-0" />
       </button>
 
@@ -100,21 +67,6 @@ function AreaRow({
                   <div className="w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
                     {d.count} · {d.percentage.toFixed(0)}%
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    disabled={mutation.isPending}
-                    onClick={() => mutation.mutate(d.deficiencyName)}
-                  >
-                    {mutation.isPending &&
-                    mutation.variables === d.deficiencyName ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Ticket className="h-3.5 w-3.5" />
-                    )}
-                    Ticket
-                  </Button>
                 </div>
               ))}
             </div>
@@ -140,11 +92,9 @@ function AreaRow({
 
 export function CheckAreaAccordion({
   areas,
-  storeName,
   photos,
 }: {
   areas: CheckAreaReport[];
-  storeName: string;
   photos: PhotoReport[];
 }) {
   if (areas.length === 0) {
@@ -157,7 +107,7 @@ export function CheckAreaAccordion({
   return (
     <div>
       {areas.map((a) => (
-        <AreaRow key={a.checkAreaId} area={a} storeName={storeName} photos={photos} />
+        <AreaRow key={a.checkAreaId} area={a} photos={photos} />
       ))}
     </div>
   );

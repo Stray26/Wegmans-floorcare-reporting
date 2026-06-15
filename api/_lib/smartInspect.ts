@@ -78,6 +78,9 @@ interface PermOuterTier {
   outerTierId: number | string;
 }
 interface PermConfig {
+  configId?: number | string;
+  name?: string;
+  configName?: string;
   permissionOuterTiers?: PermOuterTier[];
 }
 interface Permission {
@@ -99,6 +102,44 @@ export function outerTierNamesFrom(resp: PermissionsResponse): Set<string> {
     }
   }
   return names;
+}
+
+export interface PermittedStore {
+  outerTierId: string;
+  name: string;
+}
+
+/** Flatten a getPermissions response into the user's permitted stores (id + name). */
+export function permittedStoresFrom(resp: PermissionsResponse): PermittedStore[] {
+  const perms = Array.isArray(resp.permissions) ? resp.permissions : [resp.permissions];
+  const seen = new Set<string>();
+  const stores: PermittedStore[] = [];
+  for (const p of perms) {
+    for (const cfg of p?.permissionConfigs ?? []) {
+      for (const ot of cfg.permissionOuterTiers ?? []) {
+        const id = String(ot.outerTierId ?? ot.id ?? "");
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        stores.push({ outerTierId: id, name: ot.name ?? "" });
+      }
+    }
+  }
+  return stores;
+}
+
+/** The first config (inspection program) named in a getPermissions response. */
+export function firstConfigFrom(
+  resp: PermissionsResponse
+): { configId: string; configName: string } | null {
+  const perms = Array.isArray(resp.permissions) ? resp.permissions : [resp.permissions];
+  for (const p of perms) {
+    for (const cfg of p?.permissionConfigs ?? []) {
+      const configId = cfg.configId != null ? String(cfg.configId) : "";
+      const configName = cfg.configName ?? cfg.name ?? "";
+      if (configId || configName) return { configId, configName };
+    }
+  }
+  return null;
 }
 
 /** Permitted store names for the company API token (token-assigned member). */

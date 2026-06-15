@@ -115,6 +115,12 @@ export interface SIRawRecord {
   /** photo reference/url when present; null/false when none */
   photo?: boolean | string | null;
   count: number;
+  /**
+   * Present on inspection.imageRecords rows: the photo's own id and its direct
+   * URL on the Smart Inspect file CDN. Absent on plain inspection.allRecords.
+   */
+  imageId?: number;
+  url?: string;
 }
 
 export interface SIInspectionNote {
@@ -172,6 +178,12 @@ export interface SITicket {
   status?: SITicketTag;
   priority?: SITicketTag;
   category?: SITicketTag;
+  /**
+   * Photo URLs attached to the ticket. Live Smart Inspect ticket responses
+   * don't carry these yet (they'd come from inspection.imageRecords); the mock
+   * supplies them so the ticket detail view is demoable.
+   */
+  photoUrls?: string[];
 }
 
 export interface SIListTagsResponse {
@@ -207,6 +219,8 @@ export interface SIPermissionOuterTier {
 
 export interface SIPermissionConfig {
   configId?: number;
+  /** LIVE getPermissions uses `name`; some shapes/mocks use `configName`. */
+  name?: string;
   configName?: string;
   permissionOuterTiers?: SIPermissionOuterTier[];
 }
@@ -283,6 +297,52 @@ export function transformApiRecord(r: SIRawRecord): SIRecord {
     hasPhoto: !!r.photo,
     checkmarkCount: r.count ?? 1,
   };
+}
+
+/**
+ * A permitted configuration (inspection program) with its permitted stores.
+ * Preserves the config -> store hierarchy from getPermissions, which
+ * extractPermittedOuterTiers flattens away.
+ */
+export interface SIPermittedConfig {
+  configId: string;
+  configName: string;
+  outerTiers: SIPermissionOuterTier[];
+}
+
+/** Normalize the permissions response into configs, each with its stores. */
+export function extractPermittedConfigs(
+  resp: SIPermissionsResponse
+): SIPermittedConfig[] {
+  const perms = Array.isArray(resp.permissions)
+    ? resp.permissions
+    : [resp.permissions];
+  const byConfig = new Map<string, SIPermittedConfig>();
+  for (const p of perms) {
+    for (const cfg of p.permissionConfigs ?? []) {
+      // Fall back to the permission-level configId when the config entry omits it.
+      const id = String(cfg.configId ?? p.configId ?? "");
+      // Live responses use `name`, mocks/docs use `configName`; never let the
+      // name be blank or the filter UI and config matching break.
+      const name =
+        cfg.configName ?? cfg.name ?? (id ? `Config ${id}` : "");
+      const key = id || name;
+      if (!key) continue;
+      let entry = byConfig.get(key);
+      if (!entry) {
+        entry = { configId: id, configName: name, outerTiers: [] };
+        byConfig.set(key, entry);
+      }
+      const seen = new Set(entry.outerTiers.map((t) => String(t.outerTierId)));
+      for (const ot of cfg.permissionOuterTiers ?? []) {
+        if (!seen.has(String(ot.outerTierId))) {
+          seen.add(String(ot.outerTierId));
+          entry.outerTiers.push(ot);
+        }
+      }
+    }
+  }
+  return [...byConfig.values()];
 }
 
 /** Normalize the permissions response into a flat list of permitted stores. */

@@ -197,7 +197,7 @@ export function StoreDetailModal({
                               {ca.checkAreaName}
                             </span>
                             <span className="text-muted-foreground">
-                              {ca.deficiencyCount} def · {formatScore(ca.qspScore)}
+                              {ca.deficiencyCount} def{store.dateRange.start === store.dateRange.end ? "" : ` · ${formatScore(ca.qspScore)}`}
                             </span>
                           </div>
                         ))}

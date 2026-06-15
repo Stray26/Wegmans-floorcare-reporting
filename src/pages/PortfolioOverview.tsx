@@ -28,7 +28,11 @@ import { exportPortfolioPdf } from "@/utils/portfolioPdf";
 import type { ScoreStatus, StoreReport } from "@/types/reporting";
 
 export function PortfolioOverview() {
-  const { stores: permittedStores, accessMode } = useSmartInspectPermissions();
+  const {
+    stores: permittedStores,
+    accessMode,
+    activeConfig,
+  } = useSmartInspectPermissions();
   const {
     data: portfolio,
     isLoading,
@@ -44,13 +48,11 @@ export function PortfolioOverview() {
     setExporting(true);
     toast({ title: "Generating PDF", description: "Building the portfolio report…" });
     try {
+      const program = activeConfig?.configName ?? "Wegmans Floorcare Compliance";
       await exportPortfolioPdf(portfolio, {
         dateStart: dateRange.start,
         dateEnd: dateRange.end,
-        scope:
-          accessMode === "group"
-            ? "Wegmans Floorcare Compliance · Region"
-            : "Wegmans Floorcare Compliance",
+        scope: accessMode === "group" ? `${program} · Region` : program,
       });
     } catch (err) {
       toast({
@@ -71,8 +73,7 @@ export function PortfolioOverview() {
 
   const stores = React.useMemo(() => {
     let rows = portfolio?.storeReports ?? [];
-    if (filters.state) rows = rows.filter((s) => s.state === filters.state);
-    if (filters.city) rows = rows.filter((s) => s.city === filters.city);
+    if (filters.store) rows = rows.filter((s) => s.storeName === filters.store);
     if (filters.inspector)
       rows = rows.filter((s) =>
         s.history.some((h) => h.inspector === filters.inspector)
@@ -108,8 +109,8 @@ export function PortfolioOverview() {
         title="Portfolio Overview"
         subtitle={
           accessMode === "group"
-            ? "Wegmans Floorcare Compliance · Region view"
-            : "Wegmans Floorcare Compliance"
+            ? `${activeConfig?.configName ?? "Wegmans Floorcare Compliance"} · Region view`
+            : (activeConfig?.configName ?? "Wegmans Floorcare Compliance")
         }
         actions={
           <>

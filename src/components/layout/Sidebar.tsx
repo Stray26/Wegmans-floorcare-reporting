@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Store,
   FileBarChart,
   Ticket,
   SlidersHorizontal,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
+import { useAuth } from "@/context/AuthContext";
 
 /**
  * Wegmans wordmark. Renders the brand logo from /wegmans-logo.png (drop the
@@ -73,7 +75,14 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const { accessMode } = useSmartInspectPermissions();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const items = NAV.filter((n) => !n.modes || n.modes.includes(accessMode));
+
+  async function onSignOut() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col bg-brand-900 text-white md:flex">
@@ -102,8 +111,19 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 px-5 py-4">
-        <p className="text-[11px] text-white/50">
+      <div className="border-t border-white/10 px-3 py-3">
+        {/* Only when a real SI session exists (demo mode without login has no
+            session to end). */}
+        {user && (
+          <button
+            onClick={onSignOut}
+            className="mb-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign out
+          </button>
+        )}
+        <p className="px-3 text-[11px] text-white/50">
           Powered by Smart Inspect
         </p>
       </div>

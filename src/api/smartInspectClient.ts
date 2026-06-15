@@ -26,6 +26,8 @@ import type { ScoreThreshold, DateRange } from "@/types/reporting";
 import {
   transformApiRecord,
   extractPermittedOuterTiers,
+  extractPermittedConfigs,
+  type SIPermissionOuterTier,
   type SIRecord,
   type SIRawRecord,
   type SITicket,
@@ -33,6 +35,7 @@ import {
   type SIPermissionsResponse,
   type SIListTagsResponse,
   type SIFilters,
+  type SIWidgets,
 } from "@/types/smartInspect";
 
 /**
@@ -56,6 +59,7 @@ export function setMockMode(value: boolean): void {
 const INSPECTION_WIDGETS = {
   "inspection.details": {},
   "inspection.allRecords": {},
+  "inspection.imageRecords": {},
 };
 const TICKET_WIDGETS = { "ticket.getTickets": {} };
 
@@ -99,12 +103,53 @@ export async function getPermissions(role: DemoRole): Promise<SIPermissionsRespo
   });
 }
 
+function toStoreMeta(
+  ot: SIPermissionOuterTier,
+  config?: { configId: string; configName: string }
+): StoreMeta {
+  const name = ot.name;
+  const city = name.includes(" - ") ? name.split(" - ").slice(1).join(" - ").trim() : undefined;
+  return {
+    buildingId: String(ot.outerTierId),
+    storeName: name,
+    city,
+    configId: config?.configId,
+    configName: config?.configName,
+  };
+}
+
 /** Flatten a permissions response into the stores (outer tiers) the user may see. */
 export function permittedStores(perms: SIPermissionsResponse): StoreMeta[] {
-  return extractPermittedOuterTiers(perms).map((ot) => {
-    const name = ot.name;
-    const city = name.includes(" - ") ? name.split(" - ").slice(1).join(" - ").trim() : undefined;
-    return { buildingId: String(ot.outerTierId), storeName: name, city };
+  return extractPermittedOuterTiers(perms).map((ot) => toStoreMeta(ot));
+}
+
+/** A permitted config (inspection program) with the stores it grants. */
+export interface PermittedConfig {
+  configId: string;
+  configName: string;
+  stores: StoreMeta[];
+}
+
+/**
+ * Known config names by id. runWidgets matches configs BY NAME, so for configs
+ * we know, prefer the canonical name over whatever label permissions carry —
+ * a mismatched label would silently fetch zero records.
+ */
+const KNOWN_CONFIG_NAMES: Record<string, string> = {
+  [String(FLOORCARE_CONFIG.configId)]: FLOORCARE_CONFIG.configurationName,
+};
+
+/** Group the permissions response by config, preserving the SI hierarchy. */
+export function permittedConfigs(perms: SIPermissionsResponse): PermittedConfig[] {
+  return extractPermittedConfigs(perms).map((cfg) => {
+    const configName = KNOWN_CONFIG_NAMES[cfg.configId] ?? cfg.configName;
+    return {
+      configId: cfg.configId,
+      configName,
+      stores: cfg.outerTiers.map((ot) =>
+        toStoreMeta(ot, { configId: cfg.configId, configName })
+      ),
+    };
   });
 }
 
@@ -126,19 +171,81 @@ function widgetArray<T>(value: unknown): T[] {
   return [];
 }
 
+/**
+ * Pull inspection.imageRecords rows out of a runWidgets response. The shape is
+ * `{ inspectionRecords: [...], noteRecords: [...] }`; tolerant of the web-app
+ * alias form (the records live under whichever widget key carries them).
+ */
+function extractImageRecords(widgets: SIWidgets): SIRawRecord[] {
+  const fromVal = (v: unknown): SIRawRecord[] | null =>
+    v &&
+    typeof v === "object" &&
+    Array.isArray((v as { inspectionRecords?: unknown }).inspectionRecords)
+      ? (v as { inspectionRecords: SIRawRecord[] }).inspectionRecords
+      : null;
+  return (
+    fromVal(widgets["inspection.imageRecords"]) ??
+    Object.values(widgets)
+      .map(fromVal)
+      .find((r): r is SIRawRecord[] => !!r) ??
+    []
+  );
+}
+
+/**
+ * Smart Inspect tickets carry no photo link, so associate each ticket with the
+ * inspection photos sharing its store + check area + deficiency (best-effort).
+ * Mutates ticket.photoUrls in place; leaves any already set (e.g. mock) alone.
+ */
+function attachTicketPhotos(tickets: SITicket[], images: SIRawRecord[]): void {
+  if (images.length === 0) return;
+  const byKey = new Map<string, string[]>();
+  for (const im of images) {
+    if (!im.url) continue;
+    const key = `${im.outerTierId}|${im.checkmark}|${im.checkAttribute}`;
+    const arr = byKey.get(key);
+    if (arr) arr.push(im.url);
+    else byKey.set(key, [im.url]);
+  }
+  for (const t of tickets) {
+    if (t.photoUrls && t.photoUrls.length > 0) continue;
+    const urls = byKey.get(`${t.outerTierId}|${t.item}|${t.deficiency}`);
+    if (urls) t.photoUrls = urls.slice(0, 6);
+  }
+}
+
+/**
+ * Resolve the config (inspection program) scoping a fetch from the stores'
+ * permission metadata. Falls back to the Floorcare pilot for StoreMeta built
+ * before configs were threaded through (or demo seeds without one).
+ */
+function configOf(stores: StoreMeta[]): { configId: string; configName: string } {
+  return {
+    configId: stores[0]?.configId ?? String(FLOORCARE_CONFIG.configId),
+    configName: stores[0]?.configName ?? FLOORCARE_CONFIG.configurationName,
+  };
+}
+
 async function fetchRecordsAndTickets(
   stores: StoreMeta[],
   dateRange: DateRange
-): Promise<{ records: SIRecord[]; tickets: SITicket[] }> {
+): Promise<{ records: SIRecord[]; tickets: SITicket[]; images: SIRawRecord[] }> {
   const outerTierIds = stores.map((s) => s.buildingId);
+  const config = configOf(stores);
 
   if (isMockMode()) {
-    const resp = getMockRunWidgets(outerTierIds, dateRange.start, dateRange.end);
+    const resp = getMockRunWidgets(
+      outerTierIds,
+      dateRange.start,
+      dateRange.end,
+      config.configName
+    );
     const records = widgetArray<SIRawRecord>(
       resp.widgets["inspection.allRecords"]
     ).map(transformApiRecord);
     const tickets = widgetArray<SITicket>(resp.widgets["ticket.getTickets"]);
-    return { records, tickets };
+    // Mock photos are synthesized by mockPhotoUrl; no image records needed.
+    return { records, tickets, images: [] };
   }
 
   // Live: outerTiers (store names) are injected/validated server-side; we send
@@ -146,7 +253,7 @@ async function fetchRecordsAndTickets(
   const outerTierNames = stores.map((s) => s.storeName);
   const baseFilters: SIFilters = {
     clientId: FLOORCARE_CONFIG.clientId,
-    configs: [FLOORCARE_CONFIG.configurationName],
+    configs: [config.configName],
     outerTiers: outerTierNames,
   };
 
@@ -171,7 +278,10 @@ async function fetchRecordsAndTickets(
   const records = widgetArray<SIRawRecord>(
     inspResp.widgets["inspection.allRecords"]
   ).map(transformApiRecord);
-  return { records, tickets };
+  const images = extractImageRecords(inspResp.widgets);
+  // SI tickets have no photo link; associate inspection photos best-effort.
+  attachTicketPhotos(tickets, images);
+  return { records, tickets, images };
 }
 
 function groupByBuilding(records: SIRecord[]): Map<string, SIRecord[]> {
@@ -184,11 +294,22 @@ function groupByBuilding(records: SIRecord[]): Map<string, SIRecord[]> {
   return map;
 }
 
-// In mock mode, synthesize photo URLs; live photos require
-// inspection.imageRecords (not yet wired). Computed per-call so the runtime
-// demo toggle takes effect.
-function currentPhotoResolver(): ((r: SIRecord) => string | null) | undefined {
-  return isMockMode() ? (r: SIRecord) => mockPhotoUrl(r.id) : undefined;
+/**
+ * Photo-URL resolver for a record. Mock mode synthesizes URLs for flagged
+ * records; live mode maps a record id to its inspection.imageRecords URL — the
+ * browser loads it straight from the Smart Inspect file CDN, exactly how the
+ * Smart Inspect web app renders photos. Computed per-call so the demo toggle
+ * takes effect.
+ */
+function photoResolver(images: SIRawRecord[]): (r: SIRecord) => string | null {
+  if (isMockMode()) {
+    return (r: SIRecord) => (r.hasPhoto ? mockPhotoUrl(r.id) : null);
+  }
+  const urlById = new Map<string, string>();
+  for (const im of images) {
+    if (im.url) urlById.set(String(im.id), im.url);
+  }
+  return (r: SIRecord) => urlById.get(r.id) ?? null;
 }
 
 /* ------------------------------- reports ------------------------------- */
@@ -198,8 +319,13 @@ export async function getPortfolioReport(
   dateRange: DateRange,
   thresholds: ScoreThreshold[]
 ) {
-  const { records, tickets } = await fetchRecordsAndTickets(stores, dateRange);
+  const { records, tickets, images } = await fetchRecordsAndTickets(
+    stores,
+    dateRange
+  );
   const byBuilding = groupByBuilding(records);
+  const config = configOf(stores);
+  const resolvePhoto = photoResolver(images);
 
   // Iterate the PERMITTED stores (not just those with records) so that
   // not-uploaded stores still appear as a separate gray status.
@@ -209,10 +335,10 @@ export async function getPortfolioReport(
       byBuilding.get(meta.buildingId) ?? [],
       tickets,
       dateRange,
-      String(FLOORCARE_CONFIG.configId),
-      FLOORCARE_CONFIG.configurationName,
+      meta.configId ?? config.configId,
+      meta.configName ?? config.configName,
       thresholds,
-      currentPhotoResolver()
+      resolvePhoto
     )
   );
 
@@ -232,21 +358,32 @@ export async function getStoreReport(
 
 export async function getTickets(stores: StoreMeta[], dateRange: DateRange) {
   if (isMockMode()) {
-    return getMockTickets(stores.map((s) => s.buildingId)).map(transformTicket);
+    return getMockTickets(
+      stores.map((s) => s.buildingId),
+      configOf(stores).configName
+    ).map(transformTicket);
   }
+  const baseFilters: SIFilters = {
+    clientId: FLOORCARE_CONFIG.clientId,
+    configs: [configOf(stores).configName],
+    outerTiers: stores.map((s) => s.storeName),
+  };
   const resp = await proxy<SIRunWidgetsResponse>("runWidgets", {
-    filters: {
-      clientId: FLOORCARE_CONFIG.clientId,
-      configs: [FLOORCARE_CONFIG.configurationName],
-      outerTiers: stores.map((s) => s.storeName),
-      isForTickets: true,
-      ticketDates: toFilter(dateRange),
-    },
+    filters: { ...baseFilters, isForTickets: true, ticketDates: toFilter(dateRange) },
     widgets: TICKET_WIDGETS,
   });
-  return widgetArray<SITicket>(resp.widgets["ticket.getTickets"]).map(
-    transformTicket
-  );
+  const tickets = widgetArray<SITicket>(resp.widgets["ticket.getTickets"]);
+  // Best-effort: attach inspection photos to tickets (store + area + deficiency).
+  try {
+    const imgResp = await proxy<SIRunWidgetsResponse>("runWidgets", {
+      filters: { ...baseFilters, inspectionRange: toFilter(dateRange) },
+      widgets: { "inspection.imageRecords": {} },
+    });
+    attachTicketPhotos(tickets, extractImageRecords(imgResp.widgets));
+  } catch (err) {
+    console.warn("Image records failed; tickets shown without photos.", err);
+  }
+  return tickets.map(transformTicket);
 }
 
 export async function getTicketTags(): Promise<SIListTagsResponse> {
@@ -260,6 +397,8 @@ export async function createTicket(input: {
   deficiency: string;
   note?: string;
   priorityId?: number;
+  /** Config (SI "location") the ticket belongs to; defaults to Floorcare. */
+  configName?: string;
 }): Promise<{ ticketId: string }> {
   if (isMockMode()) {
     return { ticketId: `WGM-${Math.floor(Math.random() * 9000 + 1000)}` };
@@ -267,7 +406,7 @@ export async function createTicket(input: {
   const resp = await proxy<{ ticket: { ticketId: number } }>("createTicket", {
     ticket: {
       summary: `${input.deficiency} in ${input.areaName}`,
-      location: FLOORCARE_CONFIG.configurationName,
+      location: input.configName ?? FLOORCARE_CONFIG.configurationName,
       building: input.storeName,
       item: input.areaName,
       deficiency: input.deficiency,

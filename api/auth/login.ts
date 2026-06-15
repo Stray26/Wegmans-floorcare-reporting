@@ -1,6 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { siPostWith, COMPANY_ID } from "../_lib/smartInspect.js";
+import {
+  siPostWith,
+  COMPANY_ID,
+  getUserPermissions,
+  permittedStoresFrom,
+  firstConfigFrom,
+} from "../_lib/smartInspect.js";
 import { sealSession, setSessionCookie, publicIdentity } from "../_lib/session.js";
+import { upsertRecipient } from "../_lib/supabase.js";
 
 /**
  * POST /api/auth/login — { username, password }
@@ -59,6 +66,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: "Your Smart Inspect account does not have access to this portal.",
     });
     return;
+  }
+
+  // Best-effort: capture this user's permitted stores so the scheduled report
+  // job can scope their email without a live session. Never blocks sign-in —
+  // if SI permissions or Supabase are unavailable, we just skip it.
+  try {
+    const perms = await getUserPermissions(si.sessionToken, COMPANY_ID, si.member.id);
+    const cfg = firstConfigFrom(perms);
+    await upsertRecipient({
+      member_id: String(si.member.id),
+      email: si.member.email ?? username,
+      display_name: si.member.displayName ?? username,
+      company_id: COMPANY_ID,
+      config_id: cfg?.configId ?? null,
+      config_name: cfg?.configName ?? null,
+      stores: permittedStoresFrom(perms),
+      permission_levels: membership.permissionLevels ?? null,
+    });
+  } catch (err) {
+    console.warn("Recipient capture failed (non-fatal):", (err as Error)?.message);
   }
 
   // Sealing/cookie can throw (e.g. missing SESSION_SECRET) — return a clean 500

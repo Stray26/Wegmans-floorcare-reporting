@@ -120,6 +120,9 @@ export interface StoreMeta {
   storeName: string;
   city?: string;
   state?: string;
+  /** Config (inspection program) this store grant belongs to. */
+  configId?: string;
+  configName?: string;
 }
 
 /**
@@ -166,7 +169,8 @@ export function transformStoreReport(
   const photos: PhotoReport[] = [];
   if (resolvePhotoUrl) {
     for (const r of records) {
-      if (!r.hasPhoto) continue;
+      // The resolver returns a URL only for records that actually have a photo
+      // (mock: hasPhoto-flagged; live: present in inspection.imageRecords).
       const url = resolvePhotoUrl(r);
       if (!url) continue;
       photos.push({
@@ -292,7 +296,12 @@ export function transformTicket(t: SITicket): TicketReport {
     createdAt: t.createdAt ?? "",
     updatedAt: t.startAt ?? t.createdAt ?? "",
     assignedTo: undefined,
-    photoUrls: [],
+    photoUrls: t.photoUrls ?? [],
+    summary: t.summary,
+    description: t.description,
+    priority: t.priority?.description,
+    category: t.category?.description,
+    dueBy: t.dueBy,
   };
 }
 

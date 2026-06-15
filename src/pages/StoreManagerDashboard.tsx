@@ -11,12 +11,10 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ScoreGauge } from "@/components/dashboard/ScoreGauge";
 import { QspTrendChart } from "@/components/dashboard/QspTrendChart";
 import { TopDeficienciesList } from "@/components/dashboard/TopDeficienciesList";
-import { DateRangePicker } from "@/components/dashboard/DateRangePicker";
 import { CheckAreaAccordion } from "@/components/reports/CheckAreaAccordion";
 import { InspectionHistoryTable } from "@/components/reports/InspectionHistoryTable";
 import { PhotoGallery } from "@/components/reports/PhotoGallery";
 import { TicketsTable } from "@/components/reports/TicketsTable";
-import { CreateTicketDialog } from "@/components/reports/CreateTicketDialog";
 import { useToast } from "@/components/ui/toast";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import { useStoreReport } from "@/hooks/useStoreReport";
@@ -112,7 +110,6 @@ export function StoreManagerDashboard() {
                 ))}
               </select>
             )}
-            <DateRangePicker className="hidden sm:inline-flex" />
             <Button
               variant="outline"
               size="sm"
@@ -140,10 +137,6 @@ export function StoreManagerDashboard() {
           </>
         }
       />
-
-      <div className="mb-4 sm:hidden">
-        <DateRangePicker />
-      </div>
 
       {/* Did we upload? Did we pass? */}
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
@@ -192,14 +185,12 @@ export function StoreManagerDashboard() {
       {/* What do I fix? */}
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+          <CardHeader className="space-y-0">
             <CardTitle>Check Areas Needing Attention</CardTitle>
-            <CreateTicketDialog stores={stores} defaultStore={store.storeName} />
           </CardHeader>
           <CardContent className="pt-0">
             <CheckAreaAccordion
               areas={attentionAreas}
-              storeName={store.storeName}
               photos={store.photos}
             />
           </CardContent>

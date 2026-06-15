@@ -1,10 +1,10 @@
-# Wegmans Floorcare Reporting Portal — CLAUDE.md
+# Wegmans Floorcare Reporting Portal — AGENTS.md
 
 Custom client-facing reporting/analytics layer on top of **Smart Inspect** inspection data
 for the **Wegmans Floorcare Pilot**. Not a replacement for Smart Inspect — it pulls SI data
 through the SI API and presents a cleaner Wegmans-specific dashboard.
 
-## Status (as of 2026-06-15)
+## Status (as of 2026-06-11)
 
 - **Live in production**: https://wegman-s-customer-report.vercel.app
 - GitHub: `Stray26/Wegmans-floorcare-reporting` · Vercel team `stray26s-projects`, project `wegman-s-customer-report`
@@ -16,8 +16,8 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   model: **the portal is no longer open — every user needs a Smart Inspect account.**
 - Live Smart Inspect integration is **wired and working** (auth, permissions, inspection + ticket widgets, createTicket).
 - **Store Manager redesign** — organized by manager questions: upload/pass hero, expandable
-  CheckAreaAccordion, Top Deficiencies, QSP trend, Recent Inspections, photos, tickets; store
-  switcher in-header (the date filter is now global in the TopBar — see the 2026-06-15 notes).
+  CheckAreaAccordion with per-deficiency live Create Ticket, Top Deficiencies, QSP trend,
+  Recent Inspections, photos, tickets; in-header date quick-picks + store switcher.
 - **Navigation**: sidebar "Store View" link (all modes), store switcher dropdown (reads
   `?store=` query param), and "Open dashboard" deep-link from the Store Detail modal — so a
   multi-store user can reach any store's manager view. **`RequirePortfolioAccess` guards
@@ -31,29 +31,6 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
 - **PDF exports are real** (jsPDF + jspdf-autotable, lazy-loaded): `src/utils/storePdf.ts`
   (My Store report) and `src/utils/portfolioPdf.ts` (landscape portfolio report). Wired to the
   Export buttons on Store Manager and Portfolio Overview.
-### 2026-06-15 session (uncommitted as of this writing)
-
-- **Default view = Today + global date filter.** Every dashboard lands on Today
-  (`SessionContext.defaultRange`). Quick-picks (Today · Yesterday · 7d · 30d · 90d + custom) moved
-  into the global TopBar (`DateRangePicker`), driving Portfolio + Store Manager from one control;
-  the per-page pickers were removed. For a single-day range, per-check-area rows show Pass/Fail
-  instead of a 0/100 "score".
-- **Mock QSP scores are clean whole tens ≥60.** `mockData.ts` models each inspection as 10 single
-  pass/fail check areas via a seeded accept-matrix, so store/inspection/area scores are multiples
-  of 10, never <60. Demo data is anchored to "today" on a daily cadence and now honors the selected
-  date range (Today shows a realistic uploaded-vs-Not-Uploaded board; pilot stores always present).
-- **Ticket detail view.** Clicking a row in `TicketsTable` opens `TicketDetailModal`
-  (store/area/deficiency/priority/dates/notes + photos) — live on Tickets page, Store Manager, and
-  the Store Detail modal.
-- **Create-Ticket UI removed ("start slow").** No creation entry points are shown; the
-  `CreateTicketDialog` component, `createTicket` client, and `/api/createTicket` proxy are kept
-  **dormant** for easy re-enable.
-- **Live inspection photos wired.** `inspection.imageRecords` is fetched through the proxy; photos
-  render straight from the SI file CDN (public URLs), like the SI web app. Mock keeps `mockPhotoUrl`.
-- **Scheduled report emails.** Daily Vercel Cron emails curated recipients their store PDF via
-  Resend; per-user stores captured at login into Supabase. See the Scheduled report emails section
-  + `docs/scheduled-reports.md`. **Live path only.**
-
 - **Deferred**: real Excel export (Custom Detail Report still toast-mocks Excel/PDF), wiring the
   store PDF into the Store Detail modal, mobile-polish pass.
 
@@ -61,9 +38,7 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
 
 React 18 + Vite + TypeScript + Tailwind + shadcn-style UI (hand-rolled on Radix) +
 TanStack Query + Recharts + React Router. Deployed on **Vercel** with serverless
-functions in `/api`. The SI data proxy is plain Vercel functions (no DB). **Supabase**
-(project `mjhuujbwkkfjmzfmzqol`) was added 2026-06-15 for the **scheduled-report feature only**
-(recipient permissions + subscriptions) — see that section.
+functions in `/api`. No Supabase (we chose Vercel functions for the proxy).
 
 ## Commands
 
@@ -113,9 +88,7 @@ Wegmans constants centralized in `src/config/wegmans.ts` (10 bilingual check are
 - Config: **"Wegmans Floorcare Pilot"**, `configId 20035`. Company/`companyId 1382`.
 - `clientId` in runWidgets filters is **irrelevant** — the token scopes the company. (Doc said 1172; ignore.)
 - 3 pilot stores (outer tiers): 115 Tysons Corner (`outerTierId 191864`), 73 Johnson City (191941), 92 Military Road (191958).
-- **Pilot inspection data is in April 2026** (≈Apr 9–23). The default view is now **Today**
-  (changed 2026-06-15), so under Live the board lands empty until daily uploads exist — widen to
-  30d/90d (or use the quick-picks) to see the April pilot data.
+- **Pilot inspection data is in April 2026** (≈Apr 9–23). Default reporting window is last 90 days so it shows.
 - Date filters require RFC-3339 with `Z`, e.g. `2026-04-01T00:00:00Z` (bare `...T00:00:00` is rejected).
 - `inspection.allRecords` returns `{ records: [...], total }` — NOT a bare array. `ticket.getTickets` wraps similarly. `widgetArray()` in the client unwraps `records`/`tickets`/`data`/bare.
 - Record fields: `checkmark` (long text, numbered "01.…"), `checkAttribute` ("Acceptable" / "Buildup" …), `isGood` (true→100/false→0/null→50), `outerTierId`, `count`. Live rows omit `configId`/`state`.
@@ -139,33 +112,12 @@ stay on the company SIQ-1 token but requested outer tiers are validated against 
 permissions. The permissions query key includes memberId so a re-login never sees the
 previous user's cache. `createTicket` additionally checks the user's `canTicket` flag.
 
-## Scheduled report emails (2026-06-15)
-
-Daily Vercel Cron (`api/cron/send-reports.ts`; `vercel.json` crons `0 11 * * *`) emails curated
-recipients their store Floorcare PDF via **Resend**. A cron has no user session and SI only
-returns a member's store grants to that member's own login, so each user's permitted stores are
-**captured at login** into Supabase `report_recipients` (`api/auth/login.ts` → `upsertRecipient`,
-best-effort). `report_subscriptions` (curated) holds who + cadence; stores resolve from
-`report_recipients` (by `member_id`, else `email`). The server PDF reuses the shared layout
-`src/utils/storePdfLayout.ts` — identical to the browser export. Supabase is **server-only**
-(service-role key; RLS on, no policies; the browser never touches it). Cadence is evaluated by the
-daily run (daily; weekly `weekly_dow`; monthly `monthly_dom`) with a `last_sent_at` same-day guard.
-Full setup, env vars, and limitations: `docs/scheduled-reports.md`.
-
-> The `/api` function bundler (esbuild) reads the **root** `tsconfig.json`, so `baseUrl`+`paths`
-> were added there (not only in `tsconfig.app.json`) to let functions import `@/…` — that's how the
-> cron reuses the shared transforms + PDF layout. Don't remove them.
-
 ## Env vars
 
 Server-side (no `VITE_` prefix, never in browser): `SMART_INSPECT_API_TOKEN`,
 `SMART_INSPECT_API_BASE_URL` (defaults to the prod URL), `SESSION_SECRET`
 (session-cookie encryption; generate with `openssl rand -base64 32`),
 `SMART_INSPECT_COMPANY_ID` (default 1382 = Wegmans).
-Scheduled report emails (server-side too): `SUPABASE_URL`
-(`https://mjhuujbwkkfjmzfmzqol.supabase.co`), `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`,
-`REPORT_EMAIL_FROM` (verified Resend sender), `CRON_SECRET` (cron auth — the cron refuses to run
-without it). See `docs/scheduled-reports.md`.
 Frontend: `VITE_ENABLE_MOCK_DATA` (`false` in prod), `VITE_APP_ENV`.
 All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also writes a `VERCEL_OIDC_TOKEN` there).
 
@@ -178,9 +130,7 @@ All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also write
 - The Vercel CLI ignores `.gitignore` and uploads everything not in **`.vercelignore`** — keep
   `node_modules`, `.npm-cache`, `.tmp`, `.npmrc`, logs out of it (a shipped `.npmrc` once redirected
   npm's cache and broke the build).
-- Create Ticket: the UI entry points were **removed 2026-06-15 ("start slow")**, but the
-  `createTicket` client + `/api/createTicket` proxy remain **dormant** and still write **real**
-  tickets to SI production when re-enabled — remember that before wiring buttons back.
+- Create Ticket is wired **live** — it writes real tickets to Smart Inspect production.
 - **Logo** is `/public/wegmans-logo.png`, a black wordmark on a **white** background. The sidebar
   shows it on a white chip (`BrandLogo` in `Sidebar.tsx`). Do NOT use `filter:brightness(0) invert(1)`
   to white-out — the white bg becomes a white square. The PDFs embed it directly (white page, fine).
@@ -204,3 +154,123 @@ All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also write
 - **getPermissions is per-user via the SIQ-0 session** (companyId + memberId required). A member's
   grants can be a SINGLE store even if the company SIQ-1 token sees all 3 — that's correct, it
   drives Store-Manager vs Portfolio routing. Don't "fix" a sparse view by widening the token.
+
+## Imported Claude Cowork project instructions
+
+You are working in Claude Cowork as my coding partner. I want you to behave like a senior product engineer, not just generate code quickly.
+
+How to work:
+
+1. First inspect the repo
+
+* Do not assume the structure.
+* Read the existing files first.
+* Identify the framework, routing setup, package manager, styling system, component structure, API patterns, and deployment setup.
+* Tell me what you found before making major changes.
+
+2. Make a plan before coding
+
+* Before editing files, give me a short implementation plan.
+* Break the work into phases.
+* Tell me which files you expect to create or modify.
+* Flag risks or unclear areas.
+
+3. Work in small, safe steps
+
+* Do not rewrite the whole app unless absolutely necessary.
+* Prefer incremental changes.
+* Preserve working code.
+* Reuse existing components and patterns where possible.
+* Avoid creating duplicate versions of the same logic.
+
+4. Do not break the current app
+
+* After each meaningful change, run the appropriate checks:
+
+  * npm install only if dependencies changed
+  * npm run build
+  * npm run lint if available
+  * npm run typecheck if available
+* If a command fails, stop and explain the issue before continuing.
+* Fix TypeScript errors instead of ignoring them.
+
+5. Treat Smart Inspect API securely
+
+* Do not put Smart Inspect API keys, usernames, passwords, tokens, or secrets in frontend code.
+* Use environment variables.
+* API calls to Smart Inspect must go through a server-side proxy, such as Vercel API routes, serverless functions, or Supabase Edge Functions.
+* The browser should only call our own safe endpoints.
+
+6. Keep mock data separate
+
+* Build with mock data first if live API details are missing.
+* Mock data should mirror the expected Smart Inspect API response shape.
+* Keep mock data isolated in a dedicated file or folder.
+* Build transform functions so we can swap mock data for live Smart Inspect API data later without rewriting the UI.
+
+7. Smart Inspect permissions are the source of truth
+
+* Do not create a new store permission system unless I explicitly approve it.
+* The app should call Smart Inspect permissions and use those permissions to determine what stores/configurations the user can access.
+* Multi-store users should see the Portfolio Dashboard.
+* Single-store users should see the Store Manager Dashboard.
+* Do not rely only on hiding UI elements. Server-side proxy routes should also validate that requested stores/configurations are allowed.
+
+8. Product logic matters
+
+* QSP Score = Acceptable checks / Total checks × 100.
+* Passed = 90–100.
+* Needs Improvement = 80–89.99.
+* Failed = below 80.
+* Not Uploaded = no inspection in selected date range.
+* Not Uploaded is not the same as Failed. It should be gray and handled separately.
+* KPIs on the corporate dashboard should be store-based, not inspection-count-based.
+
+9. Design approach
+
+* Keep the design clean, enterprise, and operational.
+* Use a dark navy sidebar, white cards, soft borders, subtle shadows, and a light gray background.
+* Use green for Passed, yellow for Needs Improvement, red for Failed, gray for Not Uploaded.
+* Avoid generic SaaS dashboard clutter.
+* The boss view should answer “which stores need attention?”
+* The store manager view should answer “what do I need to fix?”
+
+10. Ask when needed, but do not over-ask
+
+* If something is missing but can be safely mocked, proceed with mock mode.
+* Ask me only when a decision affects architecture, security, permissions, data model, or deployment.
+* Do not ask me about tiny styling choices unless there are multiple meaningful options.
+
+11. Explain changes clearly
+
+* After making changes, summarize:
+
+  * What changed
+  * Which files were modified
+  * How to test it
+  * Any remaining issues or assumptions
+
+12. Deployment target
+
+* The app should be deployable to Vercel.
+* Use Vercel-compatible routing/API patterns.
+* Keep environment variables documented.
+* Do not introduce tools or services that make Vercel deployment harder unless there is a clear reason.
+
+13. Code quality expectations
+
+* Use TypeScript types for Smart Inspect data, normalized reporting data, store reports, check areas, deficiencies, tickets, and thresholds.
+* Use reusable components.
+* Avoid hardcoding Wegmans-specific values throughout the UI; centralize configuration where practical.
+* Keep transform logic separate from display components.
+* Keep components readable and maintainable.
+
+14. Git/workflow behavior
+
+* Before large changes, tell me the recommended branch name.
+* Make changes in logical batches.
+* Do not delete large files, routes, or components without explaining why.
+* If you encounter messy existing code, suggest cleanup but do not refactor unrelated areas unless needed.
+
+Your goal:
+Help me build a clean, secure, Vercel-deployable Wegmans Smart Inspect custom reporting portal that can start with mock data and later connect to the live Smart Inspect API without rewriting the app.

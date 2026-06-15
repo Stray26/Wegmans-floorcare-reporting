@@ -3,17 +3,22 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/context/SessionContext";
+import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import type { StoreReport } from "@/types/reporting";
 
+/**
+ * Corporate filter hierarchy mirrors Smart Inspect: Config (inspection
+ * program) -> Store. Config is a SCOPE — applying it rescopes the whole
+ * dashboard via the session's configFilter (data is refetched for that
+ * config). Store and Inspector narrow the visible rows client-side.
+ */
 export interface PortfolioFilters {
-  state: string | null;
-  city: string | null;
+  store: string | null;
   inspector: string | null;
 }
 
 export const EMPTY_FILTERS: PortfolioFilters = {
-  state: null,
-  city: null,
+  store: null,
   inspector: null,
 };
 
@@ -58,21 +63,36 @@ export function FilterDrawer({
   filters: PortfolioFilters;
   onApply: (f: PortfolioFilters) => void;
 }) {
-  const { dateRange, setDateRange } = useSession();
+  const { dateRange, setDateRange, setConfigFilter } = useSession();
+  const { configs, activeConfig } = useSmartInspectPermissions();
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<PortfolioFilters>(filters);
+  const [draftConfig, setDraftConfig] = React.useState<string | null>(
+    activeConfig?.configName ?? null
+  );
 
   React.useEffect(() => {
-    if (open) setDraft(filters);
-  }, [open, filters]);
+    if (open) {
+      setDraft(filters);
+      setDraftConfig(activeConfig?.configName ?? null);
+    }
+  }, [open, filters, activeConfig]);
 
-  const states = [...new Set(stores.map((s) => s.state))].sort();
-  const cities = [...new Set(stores.map((s) => s.city))].sort();
+  const configNames = configs.map((c) => c.configName);
+  // Store options cascade from the DRAFT config's permitted stores.
+  const draftConfigStores =
+    configs.find((c) => c.configName === draftConfig)?.stores ?? [];
+  const storeNames = draftConfigStores.map((s) => s.storeName).sort();
   const inspectors = [
     ...new Set(stores.flatMap((s) => s.history.map((h) => h.inspector))),
   ].sort();
 
   const activeCount = Object.values(filters).filter(Boolean).length;
+
+  function apply(next: PortfolioFilters, config: string | null) {
+    setConfigFilter(config);
+    onApply(next);
+  }
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -129,17 +149,32 @@ export function FilterDrawer({
               </label>
             </div>
 
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                Config
+              </span>
+              <select
+                value={draftConfig ?? ""}
+                onChange={(e) => {
+                  // Changing config resets the store filter — the store list
+                  // cascades from the selected config.
+                  setDraftConfig(e.target.value || null);
+                  setDraft((d) => ({ ...d, store: null }));
+                }}
+                className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {configNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Select
-              label="State"
-              value={draft.state}
-              options={states}
-              onChange={(v) => setDraft((d) => ({ ...d, state: v }))}
-            />
-            <Select
-              label="City"
-              value={draft.city}
-              options={cities}
-              onChange={(v) => setDraft((d) => ({ ...d, city: v }))}
+              label="Store"
+              value={draft.store}
+              options={storeNames}
+              onChange={(v) => setDraft((d) => ({ ...d, store: v }))}
             />
             <Select
               label="Inspector"
@@ -155,7 +190,8 @@ export function FilterDrawer({
               className="flex-1"
               onClick={() => {
                 setDraft(EMPTY_FILTERS);
-                onApply(EMPTY_FILTERS);
+                setDraftConfig(configNames[0] ?? null);
+                apply(EMPTY_FILTERS, null);
               }}
             >
               Clear filters
@@ -163,7 +199,7 @@ export function FilterDrawer({
             <Button
               className="flex-1"
               onClick={() => {
-                onApply(draft);
+                apply(draft, draftConfig);
                 setOpen(false);
               }}
             >

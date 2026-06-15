@@ -58,6 +58,9 @@ const PILOT_STORES: StoreSeed[] = [
   { outerTierId: 92, storeNumber: "92", outerTier: "92 - Military Road", city: "Buffalo", state: "NY" },
 ];
 
+/** The three live pilot stores — always populated in the demo (incl. today). */
+const PILOT_IDS = new Set(PILOT_STORES.map((s) => s.outerTierId));
+
 // Real Wegmans-market cities across the chain's footprint, for a believable
 // 100-store demo portfolio.
 const CITY_POOL: { city: string; state: string }[] = [
@@ -138,6 +141,35 @@ function seedById(id: string): StoreSeed | undefined {
   return STORE_SEEDS.find((s) => String(s.outerTierId) === String(id));
 }
 
+/* ------------------------------ demo configs ---------------------------- */
+/**
+ * A second demo config (inspection program) so the corporate Config -> Store
+ * filter cascade is demonstrable in Demo mode. Live currently has only the
+ * Floorcare pilot; SI permissions group stores under configs exactly like this.
+ */
+const SANITATION_CONFIG = {
+  configId: 20036,
+  configurationName: "Wegmans Sanitation Pilot",
+};
+
+/** Every 3rd store participates in the sanitation pilot (~33 stores). */
+const SANITATION_STORE_IDS = new Set(
+  STORE_SEEDS.filter((_, i) => i % 3 === 0).map((s) => s.outerTierId)
+);
+
+interface MockConfig {
+  configId: number;
+  configurationName: string;
+}
+
+function mockConfigByName(name?: string): MockConfig {
+  if (name === SANITATION_CONFIG.configurationName) return SANITATION_CONFIG;
+  return {
+    configId: FLOORCARE_CONFIG.configId,
+    configurationName: FLOORCARE_CONFIG.configurationName,
+  };
+}
+
 /* ----------------------------- permissions ----------------------------- */
 /**
  * Demo roles:
@@ -174,6 +206,23 @@ export function getMockPermissions(role: DemoRole): SIPermissionsResponse {
             outerTierId: s.outerTierId,
           })),
         },
+        // Corporate also sees the second demo program, with its store subset,
+        // so the Config -> Store filter cascade is exercisable in Demo mode.
+        ...(role === "boss"
+          ? [
+              {
+                configId: SANITATION_CONFIG.configId,
+                configName: SANITATION_CONFIG.configurationName,
+                permissionOuterTiers: stores
+                  .filter((s) => SANITATION_STORE_IDS.has(s.outerTierId))
+                  .map((s) => ({
+                    id: s.outerTierId,
+                    name: s.outerTier,
+                    outerTierId: s.outerTierId,
+                  })),
+              },
+            ]
+          : []),
       ],
     },
   };
@@ -201,99 +250,159 @@ export function getMockListTags(): SIListTagsResponse {
 /* ------------------------- record data generator ----------------------- */
 
 function daysAgoIso(days: number, hour = 6): string {
-  const d = new Date("2026-06-09T00:00:00Z");
+  // Anchored to the real "now" so the demo portfolio is always current and the
+  // Today / Yesterday quick-picks land on real, populated days.
+  const d = new Date();
   d.setUTCDate(d.getUTCDate() - days);
   d.setUTCHours(hour, Math.floor((days * 7) % 60), 0, 0);
   return d.toISOString();
 }
 
 /**
- * Generate raw allRecords rows for one store. Each row = one checkmark
- * observation carrying `count` checks and an isGood flag (acceptable or a
- * specific deficiency attribute).
+ * QSP scoring model for the demo portfolio.
+ *
+ * Wegmans inspects 10 check areas per visit. We model each area as a single
+ * pass/fail check (count = 1), so an inspection's QSP = (acceptable areas / 10)
+ * x 100 is always a whole ten. With a fixed 10 inspections per store, the
+ * per-store and per-check-area aggregates also land on whole tens. Scores are
+ * floored at 60 (no store / inspection / check-area score ever shows < 60).
+ */
+const INSPECTIONS_PER_STORE = 10;
+const MIN_ACCEPTABLE = 6; // 6/10 -> 60, the floor
+const MAX_ACCEPTABLE = 10; // 10/10 -> 100
+
+/** Deterministic store QSP target (whole ten, 60-100) with a believable mix. */
+function pickTargetScore(rng: () => number): number {
+  const r = rng();
+  if (r < 0.05) return 60; // failed
+  if (r < 0.12) return 70; // failed
+  if (r < 0.35) return 80; // needs improvement
+  if (r < 0.68) return 90; // passed
+  return 100; // passed
+}
+
+/** Vary a margin vector with canceling +1/-1 swaps; preserves sum and [6,10]. */
+function perturbMargins(margin: number[], rng: () => number): void {
+  for (let s = 0; s < 8; s++) {
+    const i = Math.floor(rng() * margin.length);
+    const j = Math.floor(rng() * margin.length);
+    if (i !== j && margin[i] < MAX_ACCEPTABLE && margin[j] > MIN_ACCEPTABLE) {
+      margin[i] += 1;
+      margin[j] -= 1;
+    }
+  }
+}
+
+/**
+ * Gale-Ryser greedy realization of a 0/1 matrix with the given row and column
+ * sums: assign each row's acceptables to the columns with the most remaining
+ * capacity. Returns null if the requested margins aren't realizable.
+ */
+function realizeMatrix(
+  rowSums: number[],
+  colSums: number[]
+): boolean[][] | null {
+  const matrix = rowSums.map(() =>
+    new Array<boolean>(colSums.length).fill(false)
+  );
+  const colRem = colSums.map((rem, i) => ({ i, rem }));
+  const rowOrder = rowSums.map((v, k) => ({ k, v })).sort((a, b) => b.v - a.v);
+  for (const { k, v } of rowOrder) {
+    colRem.sort((a, b) => b.rem - a.rem || a.i - b.i);
+    if (v > colRem.length) return null;
+    for (let t = 0; t < v; t++) {
+      if (colRem[t].rem <= 0) return null;
+      matrix[k][colRem[t].i] = true;
+      colRem[t].rem -= 1;
+    }
+  }
+  return colRem.every((c) => c.rem === 0) ? matrix : null;
+}
+
+/**
+ * Build the [area][inspection] acceptable matrix for one store. Row sums =
+ * per-area pass counts, column sums = per-inspection pass counts; both, and the
+ * grand total, are tuned so every derived QSP score is a whole ten in [60,100].
+ * Falls back to the uniform matrix (flat at the target) if a perturbed pair of
+ * margins isn't realizable.
+ */
+function buildAcceptableMatrix(rng: () => number, target: number): boolean[][] {
+  const base = target / 10; // 6..10
+  const rows = new Array(CHECK_AREAS.length).fill(base);
+  const cols = new Array(INSPECTIONS_PER_STORE).fill(base);
+  perturbMargins(rows, rng);
+  perturbMargins(cols, rng);
+  return (
+    realizeMatrix(rows, cols) ??
+    realizeMatrix(
+      new Array(CHECK_AREAS.length).fill(base),
+      new Array(INSPECTIONS_PER_STORE).fill(base)
+    )!
+  );
+}
+
+/**
+ * Generate raw allRecords rows for one store: one row per (check area,
+ * inspection) - Acceptable when the matrix passes, otherwise a single
+ * deficiency attribute. `count` is always 1 so every QSP stays on a clean ten.
+ * The store produces different (deterministic) results under different programs.
  */
 function makeStoreRecords(
   seed: StoreSeed,
-  quality: number,
-  inspectionCount: number
+  target: number,
+  config: MockConfig,
+  startOffset: number
 ): SIRawRecord[] {
-  const rng = mulberry32(seed.outerTierId * 977 + 13);
+  const rng = mulberry32(seed.outerTierId * 977 + 13 + (config.configId % 977));
+  const matrix = buildAcceptableMatrix(rng, target);
   const rows: SIRawRecord[] = [];
   let rid = seed.outerTierId * 100000;
 
-  for (let ins = 0; ins < inspectionCount; ins++) {
+  for (let ins = 0; ins < INSPECTIONS_PER_STORE; ins++) {
     const inspectionId = seed.outerTierId * 1000 + ins;
-    const dayOffset = (inspectionCount - ins) * 4 + Math.floor(rng() * 3);
+    // Daily cadence: the newest inspection lands `startOffset` days ago, older
+    // ones step back a day each. startOffset 0 => this store inspected today.
+    const dayOffset = startOffset + (INSPECTIONS_PER_STORE - 1 - ins);
     const recordDate = daysAgoIso(dayOffset);
     const uploadDate = daysAgoIso(dayOffset, 8);
     const inspector = INSPECTORS[Math.floor(rng() * INSPECTORS.length)];
 
-    CHECK_AREAS.forEach((ca, idx) => {
-      const total = 18 + Math.floor(rng() * 14);
-      const areaPenalty = idx % 4 === 0 ? 0.08 : 0;
-      const accShare = Math.min(
-        0.99,
-        Math.max(0.55, quality - areaPenalty + (rng() - 0.5) * 0.06)
-      );
-      const acceptable = Math.round(total * accShare);
-      let deficiencies = total - acceptable;
+    CHECK_AREAS.forEach((ca, areaIdx) => {
+      const base = {
+        id: rid++,
+        inspectionId,
+        recordDate,
+        uploadDate,
+        config: config.configurationName,
+        configId: config.configId,
+        outerTier: seed.outerTier,
+        outerTierId: seed.outerTierId,
+        midTier: FLOORCARE_CONFIG.midTier,
+        midTierId: 1,
+        selectTier: FLOORCARE_CONFIG.areaTypeName,
+        region: seed.state,
+        state: seed.state,
+        inspector,
+        checkmark: ca.label,
+        count: 1,
+      };
 
-      // Acceptable row
-      if (acceptable > 0) {
+      if (matrix[areaIdx][ins]) {
         rows.push({
-          id: rid++,
-          inspectionId,
-          recordDate,
-          uploadDate,
-          config: FLOORCARE_CONFIG.configurationName,
-          configId: FLOORCARE_CONFIG.configId,
-          outerTier: seed.outerTier,
-          outerTierId: seed.outerTierId,
-          midTier: FLOORCARE_CONFIG.midTier,
-          midTierId: 1,
-          selectTier: FLOORCARE_CONFIG.areaTypeName,
-          region: seed.state,
-          state: seed.state,
-          inspector,
-          checkmark: ca.label,
+          ...base,
           checkAttribute: "Acceptable",
           isGood: true,
           photo: false,
-          count: acceptable,
         });
-      }
-
-      // Deficiency rows spread across attributes
-      const shuffled = [...DEFICIENCY_ATTRIBUTES].sort(() => rng() - 0.5);
-      for (let i = 0; i < shuffled.length && deficiencies > 0; i++) {
-        const take =
-          i === shuffled.length - 1
-            ? deficiencies
-            : Math.floor(rng() * (deficiencies / 1.5));
-        if (take > 0) {
-          rows.push({
-            id: rid++,
-            inspectionId,
-            recordDate,
-            uploadDate,
-            config: FLOORCARE_CONFIG.configurationName,
-            configId: FLOORCARE_CONFIG.configId,
-            outerTier: seed.outerTier,
-            outerTierId: seed.outerTierId,
-            midTier: FLOORCARE_CONFIG.midTier,
-            midTierId: 1,
-            selectTier: FLOORCARE_CONFIG.areaTypeName,
-            region: seed.state,
-            state: seed.state,
-            inspector,
-            checkmark: ca.label,
-            checkAttribute: shuffled[i].label,
-            isGood: false,
-            photo: rng() > 0.55,
-            count: take,
-          });
-          deficiencies -= take;
-        }
+      } else {
+        const def =
+          DEFICIENCY_ATTRIBUTES[Math.floor(rng() * DEFICIENCY_ATTRIBUTES.length)];
+        rows.push({
+          ...base,
+          checkAttribute: def.label,
+          isGood: false,
+          photo: rng() > 0.55,
+        });
       }
     });
   }
@@ -307,12 +416,19 @@ function makeStoreRecords(
  */
 export function getMockRunWidgets(
   outerTierIds: string[],
-  _startDate: string,
-  _endDate: string
+  startDate: string,
+  endDate: string,
+  configName?: string
 ): SIRunWidgetsResponse {
+  const config = mockConfigByName(configName);
   const allowed = STORE_SEEDS.filter((s) =>
     outerTierIds.includes(String(s.outerTierId))
   );
+  // Honor the selected reporting window: a record counts when its day falls
+  // within [startDate, endDate]. With Today as the default, this is what makes
+  // the board show "uploaded today" vs. "Not Uploaded" (no records in range).
+  const startDay = startDate.slice(0, 10);
+  const endDay = endDate.slice(0, 10);
 
   const allRecords: SIRawRecord[] = [];
   let numGood = 0;
@@ -320,15 +436,26 @@ export function getMockRunWidgets(
   let totalPhotos = 0;
   const inspectionIds = new Set<number | string>();
 
-  allowed.forEach((seed, i) => {
-    const rng = mulberry32(seed.outerTierId * 31 + 5);
-    const notUploaded = i !== 0 && rng() < 0.12;
-    if (notUploaded) return; // no records in range => "Not Uploaded"
+  allowed.forEach((seed) => {
+    const rng = mulberry32(seed.outerTierId * 31 + 5 + (config.configId % 31));
+    const isPilot = PILOT_IDS.has(seed.outerTierId);
+    // A slice of non-pilot stores have no inspections at all in the demo.
+    // Keyed off the store (not request order) so the portfolio and the
+    // single-store view agree on whether a store has data.
+    const neverUploaded = !isPilot && rng() < 0.12;
+    if (neverUploaded) return;
 
-    const quality = 0.7 + rng() * 0.32;
-    const inspectionCount = 4 + Math.floor(rng() * 6);
-    const rows = makeStoreRecords(seed, quality, inspectionCount);
+    const target = pickTargetScore(rng);
+    // Where this store's most recent inspection lands. Pilot stores always
+    // have one today so key demo stores are never empty; the rest are a
+    // believable mix of uploaded-today vs. a few days behind (=> Not Uploaded
+    // for the Today view).
+    const uploadedToday = isPilot || rng() < 0.6;
+    const startOffset = uploadedToday ? 0 : 1 + Math.floor(rng() * 3);
+    const rows = makeStoreRecords(seed, target, config, startOffset);
     for (const r of rows) {
+      const day = r.recordDate.slice(0, 10);
+      if (day < startDay || day > endDay) continue; // outside the window
       allRecords.push(r);
       totalChecks += r.count;
       if (r.isGood === true) numGood += r.count;
@@ -344,16 +471,16 @@ export function getMockRunWidgets(
     numNotes: 0,
     selectTiers: [FLOORCARE_CONFIG.areaTypeName],
     inspectors: [...new Set(allRecords.map((r) => r.inspector))],
-    configs: [FLOORCARE_CONFIG.configurationName],
+    configs: [config.configurationName],
     inspectionIds: [...inspectionIds],
-    startDate: _startDate,
-    endDate: _endDate,
+    startDate,
+    endDate,
   };
 
   const widgets: SIWidgets = {
     "inspection.details": details,
     "inspection.allRecords": allRecords,
-    "ticket.getTickets": getMockTickets(outerTierIds),
+    "ticket.getTickets": getMockTickets(outerTierIds, configName),
   };
 
   return { appliedFilters: {}, success: true, widgets };
@@ -361,7 +488,11 @@ export function getMockRunWidgets(
 
 /* -------------------------------- tickets ------------------------------ */
 
-export function getMockTickets(outerTierIds: string[]): SITicket[] {
+export function getMockTickets(
+  outerTierIds: string[],
+  configName?: string
+): SITicket[] {
+  const config = mockConfigByName(configName);
   const allowed = STORE_SEEDS.filter((s) =>
     outerTierIds.includes(String(s.outerTierId))
   );
@@ -370,7 +501,7 @@ export function getMockTickets(outerTierIds: string[]): SITicket[] {
   let n = 4800;
 
   allowed.forEach((s) => {
-    const rng = mulberry32(s.outerTierId * 41 + 7);
+    const rng = mulberry32(s.outerTierId * 41 + 7 + (config.configId % 41));
     const count = Math.floor(rng() * 4);
     for (let i = 0; i < count; i++) {
       n += 1;
@@ -379,13 +510,17 @@ export function getMockTickets(outerTierIds: string[]): SITicket[] {
       const ageDays = 1 + Math.floor(rng() * 20);
       const status = tags.statuses[Math.floor(rng() * tags.statuses.length)];
       const priority = tags.priorities[Math.floor(rng() * tags.priorities.length)];
+      const defName = def.label.split("/")[0].trim();
+      const areaName = ca.label.split("/")[0].trim();
+      const photoCount = 1 + Math.floor(rng() * 3); // 1-3 photos per ticket
       tickets.push({
         ticketId: n,
         companyId: FLOORCARE_CONFIG.clientId,
-        summary: `${def.label.split("/")[0].trim()} in ${ca.label.split("/")[0].trim()}`,
-        location: FLOORCARE_CONFIG.configurationName,
+        summary: `${defName} in ${areaName}`,
+        description: `${defName} observed in ${areaName} at ${s.outerTier} during the daily floor care inspection. Assign and resolve.`,
+        location: config.configurationName,
         building: s.outerTier,
-        configId: FLOORCARE_CONFIG.configId,
+        configId: config.configId,
         outerTierId: s.outerTierId,
         item: ca.label,
         deficiency: def.label,
@@ -398,6 +533,9 @@ export function getMockTickets(outerTierIds: string[]): SITicket[] {
         status,
         priority,
         category: tags.categories[0],
+        photoUrls: Array.from({ length: photoCount }, (_, k) =>
+          mockPhotoUrl(`ticket-${n}-${k}`)
+        ),
       });
     }
   });

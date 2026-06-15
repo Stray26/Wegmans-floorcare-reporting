@@ -18,24 +18,53 @@ interface SessionContextValue {
   setDateRange: (r: DateRange) => void;
   demoData: boolean;
   setDemoData: (v: boolean) => void;
+  /**
+   * Selected config (inspection program) NAME scoping all dashboards.
+   * null = default to the user's first permitted config. Set from the
+   * corporate Filters drawer; useSmartInspectPermissions resolves it.
+   */
+  configFilter: string | null;
+  setConfigFilter: (name: string | null) => void;
 }
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
+const CONFIG_FILTER_KEY = "wegmans-portal.configFilter";
+
 function defaultRange(): DateRange {
-  // Default to the last 90 days so recent pilot inspections are visible
-  // out of the box (the date picker can narrow/widen this at any time).
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 90);
+  // Land on Today. This is a daily upload/compliance check, so the default
+  // view answers "who uploaded today, and did they pass?". The quick-pick bar
+  // can widen to 7/30/90 days (or a custom range) at any time.
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: iso(start), end: iso(end) };
+  const today = iso(new Date());
+  return { start: today, end: today };
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = React.useState<DemoRole>("boss");
   const [dateRange, setDateRange] = React.useState<DateRange>(defaultRange());
   const [demoData, setDemoDataState] = React.useState<boolean>(DEFAULT_MOCK);
+  // Persist the selected config across reloads. If the saved name no longer
+  // matches a permitted config, useSmartInspectPermissions falls back to the
+  // user's first permitted config — a stale value can never widen access.
+  const [configFilter, setConfigFilterState] = React.useState<string | null>(
+    () => {
+      try {
+        return window.localStorage.getItem(CONFIG_FILTER_KEY);
+      } catch {
+        return null;
+      }
+    }
+  );
+  const setConfigFilter = React.useCallback((name: string | null) => {
+    try {
+      if (name) window.localStorage.setItem(CONFIG_FILTER_KEY, name);
+      else window.localStorage.removeItem(CONFIG_FILTER_KEY);
+    } catch {
+      // storage unavailable (private mode etc.) — selection still works in-session
+    }
+    setConfigFilterState(name);
+  }, []);
 
   // Flip the client's runtime mock flag SYNCHRONOUSLY before the state update
   // re-renders consumers. If we did this in an effect, the permissions query
@@ -56,8 +85,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setDateRange,
       demoData,
       setDemoData,
+      configFilter,
+      setConfigFilter,
     }),
-    [role, dateRange, demoData, setDemoData]
+    [role, dateRange, demoData, setDemoData, configFilter, setConfigFilter]
   );
 
   return (

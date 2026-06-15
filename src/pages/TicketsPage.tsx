@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { TicketsTable } from "@/components/reports/TicketsTable";
-import { CreateTicketDialog } from "@/components/reports/CreateTicketDialog";
 import { useToast } from "@/components/ui/toast";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import { useTickets } from "@/hooks/useTickets";
@@ -95,7 +94,6 @@ export function TicketsPage() {
         subtitle="Smart Inspect ticket tracking and follow-up"
         actions={
           <>
-            <CreateTicketDialog stores={stores} />
             <Button
               variant="outline"
               size="sm"

@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   Table,
   TableHeader,
@@ -9,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/utils/formatting";
 import type { TicketReport, TicketStatus } from "@/types/reporting";
+import { TicketDetailModal } from "@/components/reports/TicketDetailModal";
 
 const TICKET_STATUS_STYLE: Record<TicketStatus, string> = {
   open: "bg-status-warning-bg text-status-warning",
@@ -44,6 +46,8 @@ export function TicketsTable({
   tickets: TicketReport[];
   showStore?: boolean;
 }) {
+  const [selected, setSelected] = React.useState<TicketReport | null>(null);
+
   if (tickets.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
@@ -53,6 +57,7 @@ export function TicketsTable({
   }
 
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
@@ -67,7 +72,11 @@ export function TicketsTable({
       </TableHeader>
       <TableBody>
         {tickets.map((t) => (
-          <TableRow key={t.ticketId} className="hover:bg-transparent">
+          <TableRow
+            key={t.ticketId}
+            onClick={() => setSelected(t)}
+            className="cursor-pointer"
+          >
             <TableCell className="font-medium">{t.ticketId}</TableCell>
             {showStore && (
               <TableCell className="text-muted-foreground">
@@ -91,5 +100,7 @@ export function TicketsTable({
         ))}
       </TableBody>
     </Table>
+    <TicketDetailModal ticket={selected} onClose={() => setSelected(null)} />
+    </>
   );
 }

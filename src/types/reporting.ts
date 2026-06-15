@@ -72,6 +72,13 @@ export interface TicketReport {
   updatedAt: string;
   assignedTo?: string;
   photoUrls: string[];
+  /** Richer fields surfaced in the ticket detail view. */
+  summary?: string;
+  description?: string;
+  priority?: string;
+  category?: string;
+  /** ISO due date */
+  dueBy?: string;
 }
 
 export interface TrendPoint {
