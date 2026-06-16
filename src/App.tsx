@@ -12,7 +12,7 @@ import { TicketsPage } from "@/pages/TicketsPage";
 import { ScoreSettings } from "@/pages/ScoreSettings";
 import { ReportSettings } from "@/pages/ReportSettings";
 
-/** The home route for an access mode. Single-store users belong on Store Manager. */
+/** The home route for an access mode. Non-Account users belong on Store Manager. */
 function homeFor(accessMode: string): string {
   return accessMode === "store" ? "/my-store" : "/portfolio";
 }
@@ -25,10 +25,11 @@ function HomeRedirect() {
 }
 
 /**
- * Permission-aware route guard. The Portfolio dashboard is for multi-store
- * users only; a single-store user who reaches /portfolio (via deep link, a
- * stale URL, or the post-login redirect) is bounced to their store view.
- * Enforces access by permissions, not just by hiding nav links.
+ * Permission-aware route guard. The Portfolio dashboard is for Account-role
+ * users only; anyone else who reaches /portfolio (via deep link, a stale URL,
+ * or the post-login redirect) is bounced to their store view. Enforces access
+ * by role, not just by hiding nav links. (Store data stays validated against
+ * the user's SI permissions server-side regardless.)
  */
 function RequirePortfolioAccess({ children }: { children: ReactNode }) {
   const { accessMode, isLoading } = useSmartInspectPermissions();

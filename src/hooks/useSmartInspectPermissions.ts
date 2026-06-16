@@ -12,15 +12,18 @@ import type { StoreMeta } from "@/api/reportingTransforms";
 export type AccessMode = "portfolio" | "group" | "store";
 
 /**
- * Smart Inspect permissions are the source of truth for what the user sees:
- *  - multiple stores       -> portfolio dashboard
- *  - a small group (2–5)   -> scaled-down portfolio
- *  - a single store        -> store manager dashboard
+ * What dashboard the user sees is driven by their Smart Inspect ROLE
+ * (changed 2026-06-16 — was store-count based):
+ *  - Account role          -> portfolio overview (corporate)
+ *  - Operator / Supervisor -> store manager dashboard (multi-store users switch
+ *                             stores via the in-header store switcher)
+ * Demo mode has no live role, so it falls back to store-count so the mock
+ * portfolio stays reachable under `npm run dev`.
  *
- * Permissions are grouped config -> stores. The session's `configFilter`
- * (corporate Filters drawer) picks the active config; `stores` is scoped to
- * it. Access-mode routing stays based on ALL permitted stores so switching
- * config never flips a corporate user into the store-manager view.
+ * Permissions are still grouped config -> stores; the session's `configFilter`
+ * (corporate Filters drawer) picks the active config and `stores` is scoped to
+ * it. The store data a user can fetch is always validated against their SI
+ * permissions server-side, so this role gate is routing/UX, not the security boundary.
  */
 export function useSmartInspectPermissions() {
   const { role, demoData, configFilter } = useSession();
@@ -44,8 +47,19 @@ export function useSmartInspectPermissions() {
     configs.find((c) => c.configName === configFilter) ?? configs[0] ?? null;
   const stores: StoreMeta[] = activeConfig?.stores ?? allStores;
 
-  const accessMode: AccessMode =
-    allStores.length <= 1 ? "store" : allStores.length <= 5 ? "group" : "portfolio";
+  // Role-based: Account -> portfolio, everyone else -> store manager. In demo
+  // mode there's no live SI role, so fall back to store-count (keeps the mock
+  // corporate portfolio reachable under `npm run dev`).
+  const isAccountRole = (user?.roleId ?? "").toLowerCase() === "account";
+  const accessMode: AccessMode = demoData
+    ? allStores.length <= 1
+      ? "store"
+      : allStores.length <= 5
+        ? "group"
+        : "portfolio"
+    : isAccountRole
+      ? "portfolio"
+      : "store";
 
   const perms = query.data?.permissions;
   const userName = Array.isArray(perms)

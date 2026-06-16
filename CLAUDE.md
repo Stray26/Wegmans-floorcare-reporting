@@ -121,10 +121,16 @@ Data flow: `raw SI response → transforms → normalized reporting types → UI
 - `src/api/smartInspectClient.ts` — browser client. Live mode POSTs `{endpoint, ...}` to `/api/smart-inspect`; mock mode resolves locally through the same transforms.
 - `api/smart-inspect.ts` + `api/_lib/smartInspect.ts` — single Vercel proxy. Adds `Authorization: SIQ-1 <token>`, routes by `endpoint`, and validates requested stores against the token's permissions **server-side** (`reconcileOuterTiers`) before forwarding. The browser never sees the token.
 
-**Permissions are the source of truth.** `useSmartInspectPermissions` reads SI permissions →
-`stores.length` decides the view: >5 = Portfolio, 2–5 = scaled Portfolio (group), 1 = Store Manager.
-(The Corporate/Region/Store-Manager demo role toggle was removed from the top bar 2026-06-15; it
-was mock-only.)
+**Role decides the view (changed 2026-06-16).** `useSmartInspectPermissions` sets `accessMode` from
+the user's SI **role**: `Account` → Portfolio Overview, everyone else (Operator/Supervisor) → Store
+Manager (multi-store non-Account users switch stores via the in-header switcher). This drives
+`HomeRedirect`, `RequirePortfolioAccess`, and the Sidebar nav (all read `accessMode`). It is a
+routing/UX gate only — the SI proxy still validates every requested store against the user's own
+permissions server-side, so an Account user with few stores just sees a smaller portfolio.
+**Demo mode** (no live role) falls back to the old store-count logic (>5 Portfolio, 2–5 group, 1
+Store Manager) so the mock portfolio stays reachable under `npm run dev`. (Was store-count-based for
+everyone before 2026-06-16; the Corporate/Region/Store-Manager demo role toggle was removed from the
+top bar 2026-06-15.)
 
 **Score thresholds** live in `src/config/scoreThresholds.ts` behind `useScoreThresholds`
 (provider, in-memory editable, DB-ready). QSP = acceptable/total × 100.
