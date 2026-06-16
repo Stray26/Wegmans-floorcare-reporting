@@ -109,6 +109,27 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   `/api/admin/send-report` return 200 in prod. **Still unconfirmed:** a real report email actually
   delivered to a real recipient — run Send test against a subscribed member who has Floorcare stores.
 
+### 2026-06-16 session (cont. — admin nav + config filter, branch `feature/admin-nav-and-config-filter`)
+
+- **Admin nav grouping.** Sidebar now renders **Score Settings** + **Report Emails** under an
+  admin-only **"Admin"** heading (`ADMIN_NAV` in `Sidebar.tsx`, gated by `user?.isAdmin`). Score
+  Settings moved from portfolio/group visibility to admin-only, and `/settings/scores` is now wrapped
+  in `RequireAdmin` in `App.tsx` (was unguarded) — enforced, not just hidden.
+- **Config filter "wouldn't change" — FIXED.** `FilterDrawer`'s re-sync effect depended on the
+  `activeConfig` OBJECT, which `useSmartInspectPermissions` rebuilds every render (`permittedConfigs`
+  maps fresh), so it reset the in-drawer selection every render and the Config dropdown couldn't be
+  changed. Now it depends on the stable config NAME (`activeConfigName`). See Gotchas.
+- **"All Configs" view (corporate all-stores).** New `ALL_CONFIGS` sentinel in `SessionContext`;
+  `useSmartInspectPermissions` exposes `isAllConfigs` + `configLabel` and, when selected, returns the
+  UNION of every config's stores. `smartInspectClient.fetchRecordsAndTickets` groups stores by config
+  and fetches each program separately (runWidgets matches by NAME, outerTierIds are per-config), then
+  merges. `StorePerformanceTable` renders a **Config column** in this mode (`showConfig`); the dropdown
+  shows "All Configs" only when `configNames.length > 1`. **Caveat:** KPIs are per store-row, so a
+  pilot store that lives in N configs counts N× — correct in production (one config per store),
+  inflated in the pilot.
+- **Frontend-only — no Vercel/env/dep changes.** No new env vars, API routes, or packages; lockfile
+  untouched. Ships via the normal main → Vercel deploy.
+
 ## Stack
 
 React 18 + Vite + TypeScript + Tailwind + shadcn-style UI (hand-rolled on Radix) +
@@ -326,3 +347,8 @@ All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also write
 - **getPermissions is per-user via the SIQ-0 session** (companyId + memberId required). A member's
   grants can be a SINGLE store even if the company SIQ-1 token sees all 3 — that's correct, it
   drives Store-Manager vs Portfolio routing. Don't "fix" a sparse view by widening the token.
+- **`useSmartInspectPermissions` returns a NEW `activeConfig`/`configs` object every render**
+  (`permittedConfigs` maps fresh each call). Never put `activeConfig` (or `configs`) in a `useEffect`
+  dependency array that sets state — it fires every render and clobbers local state. Symptom seen
+  2026-06-16: the FilterDrawer Config dropdown wouldn't change because its open-sync effect depended
+  on `activeConfig`. Depend on a stable primitive (`activeConfig?.configName`) instead.
