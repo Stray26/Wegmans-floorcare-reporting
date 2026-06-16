@@ -78,9 +78,36 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   report emails section, `docs/scheduled-reports.md`, and `docs/si-internal-api.md` (new endpoints +
   config/outer-tier map). Multi-config aware (Pre/Post-Launch); excludes the general config 19399.
 - **`/api` is now type-checked** via `tsconfig.api.json` (`npm run typecheck:api`) — the app build's
-  `tsc -b` only covers `src`. Vercel still bundles `/api` with esbuild (ignores this tsconfig).
-- **⚠️ Still NOT verified end-to-end** — needs the env vars set + a real cron run to confirm a send,
-  AND confirmation that the admin-session endpoints behave in the deployed function.
+  `tsc -b` only covers `src`. (Vercel runs `/api` as **un-bundled ESM**, NOT esbuild-bundled — see the
+  `@/` gotcha below; it ignores this tsconfig.)
+- **Report types**: each subscription has `report_type` (`store`|`portfolio`); server portfolio PDF
+  via shared `src/utils/portfolioPdfLayout.ts`; per-subscription send extracted to
+  `api/_lib/sendReport.ts`; admin **Send test** endpoint `POST /api/admin/send-report` (renders now,
+  emails the signed-in admin, no `last_sent` change); read-only **All members & permissions** view
+  (`GET /api/admin/members`); override + permissions store pickers are dropdowns (`StoreDropdown`),
+  not pills.
+- **Portfolio access is now ROLE-based** (Account → Portfolio, Operator/Supervisor → Store Manager) —
+  see the "Role decides the view" section. Reverses the old store-count rule.
+- **`@/` aliases crash deployed `/api`** (`ERR_MODULE_NOT_FOUND` → 500) — Vercel runs functions as
+  un-bundled ESM, so `@/` specifiers survive to runtime. Converted every value `@/` import reachable
+  from `/api` (incl. shared `src/` modules: reportingTransforms, scoreStatus) to relative `.js`. See
+  Gotchas; `npm run typecheck:api` does NOT catch it.
+- **Security cleanup.** `vmaione@mysmartinspect.com` is a SmartInspect STAFF account with
+  cross-customer access — purged from the app: `DEFAULT_ADMIN_EMAILS` (now only
+  `vincent.maione1@gmail.com`), docs, and BOTH Supabase tables. Portal admin + SI service account
+  (`SI_ADMIN_USERNAME`/`PASSWORD`) are now `vincent.maione1@gmail.com` (member 30, Account role).
+  `*.har` added to `.vercelignore` (HARs hold SI session tokens). **The `vmaione@` password was
+  exposed in chat 2026-06-16 — rotate it in Smart Inspect.**
+- **Per-completion ("on upload") auto-trigger — EVALUATED & DROPPED (2026-06-16).** SI has **no
+  outbound webhook** and **no API to observe when its native on-upload reports send**, so there is no
+  non-polling way to fire *our* email on completion, and we chose not to poll. SI *does* have native
+  on-upload reports (`getMemberReports`, frequency `Upload`; member 22450 already has photo/dynamicQsp/
+  deficiencyReport/notesReport) — configure those in SI if a per-completion email (SI's format) is
+  wanted. Otherwise rely on the scheduled reports + the Send-test button. Don't re-litigate without a
+  new SI capability. (Inspection records DO carry an `inspector` uploader name if ever useful.)
+- **Status:** the live per-member path is merged to `main` + deployed; `/api/admin/members` and
+  `/api/admin/send-report` return 200 in prod. **Still unconfirmed:** a real report email actually
+  delivered to a real recipient — run Send test against a subscribed member who has Floorcare stores.
 
 ## Stack
 
@@ -270,8 +297,9 @@ All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also write
   (`rm package-lock.json && npm install` under Node 22), or just don't regenerate it locally.
   `engines.node` is pinned to `22.x`.
 - The Vercel CLI ignores `.gitignore` and uploads everything not in **`.vercelignore`** — keep
-  `node_modules`, `.npm-cache`, `.tmp`, `.npmrc`, logs out of it (a shipped `.npmrc` once redirected
-  npm's cache and broke the build).
+  `node_modules`, `.npm-cache`, `.tmp`, `.npmrc`, logs, and **`*.har`** out of it (a shipped `.npmrc`
+  once redirected npm's cache and broke the build; `*.har` was added 2026-06-16 because HAR captures
+  embed SI session tokens and must never deploy).
 - Create Ticket: the UI entry points were **removed 2026-06-15 ("start slow")**, but the
   `createTicket` client + `/api/createTicket` proxy remain **dormant** and still write **real**
   tickets to SI production when re-enabled — remember that before wiring buttons back.

@@ -79,9 +79,23 @@ that SIQ-0 session — see `api/_lib/smartInspect.ts` (`getAdminSessionToken`,
 (`reportFrequencyId`, `reportDefinitionName`, `onlyMyUploads`, …) and
 `POST /api/listSchedulableReports` `{ companyId }` → the catalog of schedulable
 report definitions (`buildingsInspectedReport`, `deficiencyReport`, `dynamicQsp`,
-`photo`, `notesReport`, …). SI has a native per-member scheduled-report system;
-this portal emails its **own** Wegmans Floorcare PDF instead, but this is where
-to look if we ever want to hook into SI's scheduler.
+`photo`, `notesReport`, …). SI has a native per-member scheduled-report system,
+incl. an **`Upload` frequency** = "email this report when an inspection uploads"
+(member 22450 already has photo/dynamicQsp/deficiencyReport/notesReport on `Upload`).
+This portal emails its **own** Wegmans Floorcare PDF instead.
+
+**On-completion trigger — investigated 2026-06-16, NOT pursued.** Goal was a
+per-completion email in *our* format. Findings:
+- **No outbound webhook.** Nothing in the API/HAR lets SI call us on upload — SI is
+  request/response only.
+- **No send observability.** `getMemberReports` returns the *config* (which reports
+  a member gets on upload), but there is **no endpoint that logs when SI actually
+  sent** a report; those emails go to the member's inbox, invisible to us.
+- ⇒ The only way to fire *our* email on completion is **polling** SI for new
+  inspections (`inspection.allRecords` carries `inspectionId` + `uploadDate`; the
+  `inspector` field is the uploader's name, matchable to a member). Vince chose **not
+  to poll**, so per-completion is left to SI's native `Upload` report (SI's format,
+  configured in SI). Don't rebuild this without a new SI capability (e.g. a webhook).
 
 ### Config / outer-tier map (companyId 1382, from the 2026-06-16 HAR)
 
