@@ -7,7 +7,7 @@
  * Input is SIRecord[] (output of transformApiRecord over inspection.allRecords)
  * grouped by building (= outer tier = store).
  */
-import type { SIRecord, SITicket } from "@/types/smartInspect";
+import type { SIRecord, SITicket } from "../types/smartInspect.js";
 import type {
   StoreReport,
   CheckAreaReport,
@@ -20,14 +20,14 @@ import type {
   InspectionHistoryItem,
   ScoreThreshold,
   DateRange,
-} from "@/types/reporting";
+} from "../types/reporting.js";
 import {
   englishLabel,
   checkAreaIdForLabel,
   friendlyCheckmark,
-} from "@/config/wegmans";
-import { computeQspScore, getStatusForScore } from "@/utils/scoreStatus";
-import { DEFAULT_THRESHOLDS } from "@/config/scoreThresholds";
+} from "../config/wegmans.js";
+import { computeQspScore, getStatusForScore } from "../utils/scoreStatus.js";
+import { DEFAULT_THRESHOLDS } from "../config/scoreThresholds.js";
 
 /** Parse the city from an outer-tier name like "115 - Tysons Corner". */
 function cityFromBuilding(building: string): string {

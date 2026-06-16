@@ -9,12 +9,12 @@ import { join } from "node:path";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import type { UserOptions } from "jspdf-autotable";
-import type { StoreReport, PortfolioReport } from "@/types/reporting";
-import { renderStoreReportDoc, type PdfLogo } from "@/utils/storePdfLayout";
+import type { StoreReport, PortfolioReport } from "../../src/types/reporting.js";
+import { renderStoreReportDoc, type PdfLogo } from "../../src/utils/storePdfLayout.js";
 import {
   renderPortfolioReportDoc,
   type PortfolioPdfMeta,
-} from "@/utils/portfolioPdfLayout";
+} from "../../src/utils/portfolioPdfLayout.js";
 
 function loadLogoFromDisk(): PdfLogo | null {
   const candidates = [

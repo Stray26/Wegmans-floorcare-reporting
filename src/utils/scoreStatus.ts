@@ -1,5 +1,5 @@
-import type { ScoreStatus, ScoreThreshold } from "@/types/reporting";
-import { DEFAULT_THRESHOLDS } from "@/config/scoreThresholds";
+import type { ScoreStatus, ScoreThreshold } from "../types/reporting.js";
+import { DEFAULT_THRESHOLDS } from "../config/scoreThresholds.js";
 
 /**
  * Pure scoring helpers. Threshold-driven so the same logic powers the

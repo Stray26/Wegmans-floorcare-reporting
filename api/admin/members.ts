@@ -5,7 +5,7 @@ import {
   getMemberStoreGrants,
   type MemberStoreGrant,
 } from "../_lib/smartInspect.js";
-import { isFloorcareConfig } from "@/config/wegmans";
+import { isFloorcareConfig } from "../../src/config/wegmans.js";
 
 /**
  * GET /api/admin/members — the live Smart Inspect member roster plus each

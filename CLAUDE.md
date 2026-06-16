@@ -185,9 +185,14 @@ the shared layout `src/utils/storePdfLayout.ts` — identical to the browser exp
 (login still upserts it; the admin picker falls back to it if the admin service account is down).
 Full setup, env vars, and limitations: `docs/scheduled-reports.md`.
 
-> The `/api` function bundler (esbuild) reads the **root** `tsconfig.json`, so `baseUrl`+`paths`
-> were added there (not only in `tsconfig.app.json`) to let functions import `@/…` — that's how the
-> cron reuses the shared transforms + PDF layout. Don't remove them.
+> **`@/` path aliases do NOT work in deployed `/api` functions** (corrected 2026-06-16). Vercel
+> runs the functions as ESM **without bundling**, and TypeScript does NOT rewrite `@/` specifiers on
+> emit, so an `@/…` import survives into the deployed `.js` and Node throws `ERR_MODULE_NOT_FOUND`
+> at runtime (500 "function invocation failed"). **Anything reachable from `/api` must use relative
+> imports with explicit `.js` extensions** — including shared `src/` modules (`reportingTransforms`,
+> `scoreStatus`, etc.) which the cron + report PDFs pull in. **Type-only** `@/` imports
+> (`import type …`) are safe — they're erased before emit. The root-tsconfig `baseUrl`+`paths` only
+> help type-checking/Vite, not function runtime — don't rely on them in `/api`.
 
 **Admin config.** Report admins manage recipients + cadence at `/settings/reports`
 (`src/pages/ReportSettings.tsx`, behind `RequireAdmin`; admin-only Sidebar link). Admin = session
@@ -248,6 +253,12 @@ All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also write
 
 ## Gotchas (these will bite again)
 
+- **`@/` aliases crash deployed `/api` functions at runtime** (`ERR_MODULE_NOT_FOUND` → 500
+  "function invocation failed"). Functions run as un-bundled ESM; TS leaves `@/` in the emitted JS.
+  Use **relative `.js` imports** in `/api` AND in any `src/` file reachable from it (e.g.
+  `reportingTransforms`, `scoreStatus`, the PDF layouts). `import type … from "@/…"` is fine (erased).
+  `npm run typecheck:api` does NOT catch this (it resolves `@/` via tsconfig like the app build does)
+  — only a real invocation does. Verify new function endpoints by actually hitting them after deploy.
 - **Node 26 locally rewrites `package-lock.json` into a format Vercel's npm 10 rejects**
   (`npm error Invalid Version` during dedupe). Fix: regenerate the lockfile with npm 10
   (`rm package-lock.json && npm install` under Node 22), or just don't regenerate it locally.

@@ -13,21 +13,21 @@ import { siPost, getMemberStoreGrants, type CompanyMember, type MemberStoreGrant
 import { sendEmail } from "./email.js";
 import { renderStorePdf, renderPortfolioPdf } from "./reportPdf.js";
 import type { SubscriptionRow } from "./supabase.js";
-import { FLOORCARE_CONFIG, isFloorcareConfig } from "@/config/wegmans";
-import { DEFAULT_THRESHOLDS } from "@/config/scoreThresholds";
-import { transformApiRecord } from "@/types/smartInspect";
+import { FLOORCARE_CONFIG, isFloorcareConfig } from "../../src/config/wegmans.js";
+import { DEFAULT_THRESHOLDS } from "../../src/config/scoreThresholds.js";
+import { transformApiRecord } from "../../src/types/smartInspect.js";
 import {
   transformStoreReport,
   buildPortfolioReport,
   type StoreMeta,
-} from "@/api/reportingTransforms";
+} from "../../src/api/reportingTransforms.js";
 import type {
   SIRawRecord,
   SITicket,
   SIRecord,
   SIRunWidgetsResponse,
-} from "@/types/smartInspect";
-import type { StoreReport } from "@/types/reporting";
+} from "../../src/types/smartInspect.js";
+import type { StoreReport } from "../../src/types/reporting.js";
 
 /** Safety cap: never attach more than this many store PDFs to a single email. */
 export const MAX_STORES_PER_EMAIL = 30;
