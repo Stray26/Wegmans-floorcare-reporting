@@ -101,7 +101,7 @@ export function clearSessionCookie(res: VercelResponse): void {
  * it works without extra config; extend via REPORT_ADMIN_EMAILS (comma-separated).
  * Admins can configure scheduled-report recipients + cadence.
  */
-const DEFAULT_ADMIN_EMAILS = ["vmaione@mysmartinspect.com"];
+const DEFAULT_ADMIN_EMAILS = ["vmaione@mysmartinspect.com", "vincent.maione1@gmail.com"];
 export function adminEmails(): string[] {
   const fromEnv = (process.env.REPORT_ADMIN_EMAILS ?? "")
     .split(",")
