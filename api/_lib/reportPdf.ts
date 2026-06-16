@@ -9,8 +9,12 @@ import { join } from "node:path";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import type { UserOptions } from "jspdf-autotable";
-import type { StoreReport } from "@/types/reporting";
+import type { StoreReport, PortfolioReport } from "@/types/reporting";
 import { renderStoreReportDoc, type PdfLogo } from "@/utils/storePdfLayout";
+import {
+  renderPortfolioReportDoc,
+  type PortfolioPdfMeta,
+} from "@/utils/portfolioPdfLayout";
 
 function loadLogoFromDisk(): PdfLogo | null {
   const candidates = [
@@ -41,5 +45,19 @@ export function renderStorePdf(store: StoreReport): Buffer {
   const autoTable = (d: jsPDF, options: UserOptions) =>
     (d as unknown as { autoTable: (o: UserOptions) => void }).autoTable(options);
   renderStoreReportDoc(doc, autoTable, store, logo);
+  return Buffer.from(doc.output("arraybuffer") as ArrayBuffer);
+}
+
+/** Render the portfolio (multi-store summary) report to PDF bytes. */
+export function renderPortfolioPdf(
+  portfolio: PortfolioReport,
+  meta?: PortfolioPdfMeta
+): Buffer {
+  // Landscape, matching the browser export.
+  const doc = new jsPDF({ unit: "mm", format: "letter", orientation: "landscape" });
+  const logo = loadLogoFromDisk();
+  const autoTable = (d: jsPDF, options: UserOptions) =>
+    (d as unknown as { autoTable: (o: UserOptions) => void }).autoTable(options);
+  renderPortfolioReportDoc(doc, autoTable, portfolio, logo, meta);
   return Buffer.from(doc.output("arraybuffer") as ArrayBuffer);
 }

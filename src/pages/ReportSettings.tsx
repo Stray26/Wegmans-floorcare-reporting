@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Loader2, Store } from "lucide-react";
+import { Plus, Trash2, Loader2, Store, ChevronDown, Check, Send } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageShell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,11 @@ import { cn } from "@/lib/utils";
 
 type Frequency = "daily" | "weekly" | "monthly";
 const FREQ: Frequency[] = ["daily", "weekly", "monthly"];
+type ReportType = "store" | "portfolio";
+const REPORT_TYPES: { value: ReportType; label: string }[] = [
+  { value: "store", label: "Store report" },
+  { value: "portfolio", label: "Portfolio summary" },
+];
 
 interface StoreRef {
   outerTierId: string;
@@ -19,6 +24,7 @@ interface SubscriptionRow {
   email: string;
   member_id: string | null;
   frequency: Frequency;
+  report_type: ReportType;
   enabled: boolean;
   stores_override: StoreRef[] | null;
   last_sent_at: string | null;
@@ -63,39 +69,101 @@ async function jsonOrThrow(res: Response) {
   return data;
 }
 
-/** Checkbox list of stores the admin can assign. */
-function StoreChecks({
-  stores,
+interface DropItem {
+  id: string;
+  label: string;
+  sub?: string;
+}
+
+/**
+ * A compact dropdown of stores. Editable when `onToggle` is provided (checkbox
+ * list, used for the manual override); read-only otherwise (used to view a
+ * member's SI permissions). Replaces the old wall of pills.
+ */
+function StoreDropdown({
+  items,
   selected,
   onToggle,
+  emptyText = "None",
+  editableEmptyText = "None — using live permissions",
 }: {
-  stores: StoreRef[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
+  items: DropItem[];
+  selected?: Set<string>;
+  onToggle?: (id: string) => void;
+  emptyText?: string;
+  editableEmptyText?: string;
 }) {
-  if (stores.length === 0) {
-    return <p className="text-xs text-muted-foreground">No stores available to assign.</p>;
-  }
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const readOnly = !onToggle;
+  const n = readOnly ? items.length : selected?.size ?? 0;
+  const summary = readOnly
+    ? items.length === 0
+      ? emptyText
+      : `${items.length} store${items.length > 1 ? "s" : ""}`
+    : n === 0
+    ? editableEmptyText
+    : `${n} store${n > 1 ? "s" : ""} pinned`;
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {stores.map((s) => {
-        const on = selected.has(s.outerTierId);
-        return (
-          <button
-            key={s.outerTierId}
-            type="button"
-            onClick={() => onToggle(s.outerTierId)}
-            className={cn(
-              "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-              on
-                ? "border-brand-900 bg-brand-900/10 text-brand-900"
-                : "border-border text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {s.name || s.outerTierId}
-          </button>
-        );
-      })}
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+      >
+        <Store className="h-3.5 w-3.5 text-muted-foreground" />
+        <span>{summary}</span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-64 w-64 overflow-auto rounded-md border border-border bg-card p-1 shadow-lg">
+          {items.length === 0 ? (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">{emptyText}</p>
+          ) : (
+            items.map((it) => {
+              const on = selected?.has(it.id) ?? false;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => onToggle?.(it.id)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs",
+                    readOnly ? "cursor-default" : "hover:bg-muted",
+                    on ? "text-brand-900" : "text-foreground"
+                  )}
+                >
+                  {!readOnly && (
+                    <span
+                      className={cn(
+                        "flex h-3.5 w-3.5 flex-none items-center justify-center rounded-sm border",
+                        on ? "border-brand-900 bg-brand-900 text-white" : "border-border"
+                      )}
+                    >
+                      {on ? <Check className="h-2.5 w-2.5" /> : null}
+                    </span>
+                  )}
+                  <span className="truncate">
+                    {it.label}
+                    {it.sub ? <span className="text-muted-foreground"> · {it.sub}</span> : null}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -122,6 +190,7 @@ export function ReportSettings() {
 
   const [memberId, setMemberId] = React.useState("");
   const [frequency, setFrequency] = React.useState<Frequency>("weekly");
+  const [reportType, setReportType] = React.useState<ReportType>("store");
   const [addStores, setAddStores] = React.useState<Set<string>>(new Set());
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editStores, setEditStores] = React.useState<Set<string>>(new Set());
@@ -148,6 +217,30 @@ export function ReportSettings() {
       }).then(jsonOrThrow),
     onSuccess: invalidate,
     onError: (e) => toast({ title: "Couldn’t delete", description: (e as Error).message }),
+  });
+
+  // Test send: renders the report now and emails it to the signed-in admin.
+  const sendTest = useMutation({
+    mutationFn: (id: string) =>
+      fetch("/api/admin/send-report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ id }),
+      }).then(jsonOrThrow),
+    onSuccess: (res) => {
+      const r = res as { status?: string; detail?: string; sentTo?: string };
+      if (r.status === "sent") {
+        toast({
+          title: "Test email sent",
+          description: `Sent to ${r.sentTo ?? "you"} · ${r.detail ?? ""}`,
+          variant: "success",
+        });
+      } else {
+        toast({ title: "Nothing sent", description: r.detail ?? "Recipient was skipped." });
+      }
+    },
+    onError: (e) => toast({ title: "Test send failed", description: (e as Error).message }),
   });
 
   const subs = data?.subscriptions ?? [];
@@ -193,6 +286,7 @@ export function ReportSettings() {
       {
         email: m.email,
         frequency,
+        report_type: reportType,
         member_id: m.memberId,
         ...(addStores.size > 0 ? { stores_override: storesFromIds(addStores) } : {}),
       },
@@ -202,7 +296,7 @@ export function ReportSettings() {
           setAddStores(new Set());
           toast({
             title: "Subscription saved",
-            description: `${m.displayName} · ${frequency}`,
+            description: `${m.displayName} · ${frequency} · ${reportType}`,
             variant: "success",
           });
         },
@@ -210,15 +304,15 @@ export function ReportSettings() {
     );
   }
 
-  /** Quick-subscribe a member straight from the roster, at the chosen frequency. */
+  /** Quick-subscribe a member straight from the roster, at the chosen cadence/report. */
   function subscribeMember(m: MemberRef) {
     save.mutate(
-      { email: m.email, frequency, member_id: m.memberId },
+      { email: m.email, frequency, report_type: reportType, member_id: m.memberId },
       {
         onSuccess: () =>
           toast({
             title: "Subscription saved",
-            description: `${m.displayName} · ${frequency}`,
+            description: `${m.displayName} · ${frequency} · ${reportType}`,
             variant: "success",
           }),
       }
@@ -291,16 +385,35 @@ export function ReportSettings() {
                 ))}
               </select>
             </label>
+            <label>
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Report</span>
+              <select
+                className={selectCls}
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value as ReportType)}
+              >
+                {REPORT_TYPES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Button onClick={addSubscription} disabled={save.isPending || !memberId}>
               {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Add
             </Button>
           </div>
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-              Override stores (optional — leave empty to use the member’s live Smart Inspect permissions)
-            </p>
-            <StoreChecks stores={stores} selected={addStores} onToggle={toggle(setAddStores)} />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Override stores (optional):
+            </span>
+            <StoreDropdown
+              items={stores.map((s) => ({ id: s.outerTierId, label: s.name || s.outerTierId }))}
+              selected={addStores}
+              onToggle={toggle(setAddStores)}
+              editableEmptyText="None — uses live permissions"
+            />
           </div>
         </CardContent>
       </Card>
@@ -339,6 +452,7 @@ export function ReportSettings() {
                             email: s.email,
                             member_id: s.member_id,
                             frequency: e.target.value,
+                            report_type: s.report_type,
                             enabled: s.enabled,
                           })
                         }
@@ -349,6 +463,27 @@ export function ReportSettings() {
                           </option>
                         ))}
                       </select>
+                      <select
+                        className={selectCls}
+                        title="Which report this recipient gets"
+                        value={s.report_type}
+                        onChange={(e) =>
+                          save.mutate({
+                            id: s.id,
+                            email: s.email,
+                            member_id: s.member_id,
+                            frequency: s.frequency,
+                            report_type: e.target.value,
+                            enabled: s.enabled,
+                          })
+                        }
+                      >
+                        {REPORT_TYPES.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         onClick={() =>
                           save.mutate({
@@ -356,6 +491,7 @@ export function ReportSettings() {
                             email: s.email,
                             member_id: s.member_id,
                             frequency: s.frequency,
+                            report_type: s.report_type,
                             enabled: !s.enabled,
                           })
                         }
@@ -378,6 +514,20 @@ export function ReportSettings() {
                           : "Live from SI permissions"}
                       </button>
                       <Button
+                        variant="outline"
+                        size="sm"
+                        title="Send this report to yourself now (test)"
+                        disabled={sendTest.isPending}
+                        onClick={() => sendTest.mutate(s.id)}
+                      >
+                        {sendTest.isPending && sendTest.variables === s.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" />
+                        )}
+                        Send test
+                      </Button>
+                      <Button
                         variant="ghost"
                         size="icon"
                         title="Remove"
@@ -390,13 +540,17 @@ export function ReportSettings() {
                     {editing && (
                       <div className="mt-3 space-y-2 border-t border-border pt-3">
                         <p className="text-xs text-muted-foreground">
-                          Pin specific stores (overrides the member’s live permissions). Leave all
-                          unchecked to use their live Smart Inspect permissions.
+                          Pin specific stores (overrides the member’s live permissions). Leave empty
+                          to use their live Smart Inspect permissions.
                         </p>
-                        <StoreChecks
-                          stores={stores}
+                        <StoreDropdown
+                          items={stores.map((st) => ({
+                            id: st.outerTierId,
+                            label: st.name || st.outerTierId,
+                          }))}
                           selected={editStores}
                           onToggle={toggle(setEditStores)}
+                          editableEmptyText="None — uses live permissions"
                         />
                         <div className="flex gap-2">
                           <Button size="sm" disabled={save.isPending} onClick={() => saveEdit(s)}>
@@ -457,20 +611,15 @@ export function ReportSettings() {
                       {m.roleId ?? "—"}
                       {m.canGetReports ? "" : " · no reports"}
                     </span>
-                    <div className="flex flex-[2] flex-wrap gap-1.5">
-                      {m.stores.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">No Floorcare stores</span>
-                      ) : (
-                        m.stores.map((s, i) => (
-                          <span
-                            key={`${m.memberId}-${i}`}
-                            title={s.configName}
-                            className="rounded-md border border-border bg-card px-2 py-0.5 text-xs"
-                          >
-                            {s.storeName}
-                          </span>
-                        ))
-                      )}
+                    <div className="flex flex-[2] flex-wrap">
+                      <StoreDropdown
+                        items={m.stores.map((s, i) => ({
+                          id: `${m.memberId}-${i}`,
+                          label: s.storeName,
+                          sub: s.configName,
+                        }))}
+                        emptyText="No Floorcare stores"
+                      />
                     </div>
                     <Button
                       size="sm"

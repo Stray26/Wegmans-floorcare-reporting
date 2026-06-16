@@ -10,8 +10,10 @@ Store scope is pulled **live per member** at send time (updated 2026-06-16) — 
 login-capture dependency, never stale.
 
 1. **Curated subscriptions** — rows in Supabase `report_subscriptions` say *who*
-   gets email (`member_id` + `email`) and *how often*. The admin page picks from
-   the live SI member roster, so each subscription is keyed to a real member.
+   gets email (`member_id` + `email`), *how often*, and *which report*
+   (`report_type`: `store` = per-store Floorcare PDF(s), default; `portfolio` =
+   one summary PDF across the member's stores). The admin page picks from the
+   live SI member roster, so each subscription is keyed to a real member.
 2. **Live permission pull** — the cron logs in once as the SI **admin service
    account** (`SI_ADMIN_USERNAME`/`SI_ADMIN_PASSWORD` → SIQ-0 session) and calls
    `listMembers` + `getMemberPermissions` to get each subscriber's *current*
@@ -90,8 +92,10 @@ values ('manager@wegmans.com', '22440', 'weekly');
 ## Deploy & test
 
 1. Set the env vars above (incl. `SI_ADMIN_USERNAME`/`SI_ADMIN_PASSWORD`); deploy (`vercel --prod`).
-2. Add a subscription on `/settings/reports` (pick a member, choose cadence).
-3. Trigger manually to verify before waiting for the schedule:
+2. Add a subscription on `/settings/reports` (pick a member, choose cadence + report type).
+3. Click **Send test** on the subscription row — renders the report now and emails it to *you*
+   (the signed-in admin), without affecting the schedule. Fastest way to verify a real send.
+4. Or trigger the whole cron manually (sends to the real recipients due today):
    ```bash
    curl -i https://<your-app>/api/cron/send-reports \
      -H "Authorization: Bearer $CRON_SECRET"

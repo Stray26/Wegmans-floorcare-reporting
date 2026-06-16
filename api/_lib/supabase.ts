@@ -53,12 +53,16 @@ export async function upsertRecipient(rec: RecipientRecord): Promise<void> {
 /* ----------------------------- subscriptions --------------------------- */
 
 export type ReportFrequency = "daily" | "weekly" | "monthly";
+/** Which report the recipient gets: their per-store PDF, or one portfolio summary. */
+export type ReportType = "store" | "portfolio";
 
 export interface SubscriptionRow {
   id: string;
   email: string;
   member_id: string | null;
   frequency: ReportFrequency;
+  /** store = per-store Floorcare PDF(s); portfolio = single summary across their stores. */
+  report_type: ReportType;
   enabled: boolean;
   weekly_dow: number | null; // 0=Sun..6=Sat
   monthly_dom: number | null; // 1..28
@@ -98,6 +102,19 @@ export async function getRecipient(opts: {
   return data[0] as RecipientRecord;
 }
 
+/** A single subscription by id (for the admin test-send). */
+export async function getSubscriptionById(id: string): Promise<SubscriptionRow | null> {
+  const db = getSupabaseAdmin();
+  if (!db) return null;
+  const { data, error } = await db
+    .from("report_subscriptions")
+    .select("*")
+    .eq("id", id)
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return data[0] as SubscriptionRow;
+}
+
 export async function markSubscriptionSent(id: string): Promise<void> {
   const db = getSupabaseAdmin();
   if (!db) return;
@@ -114,6 +131,7 @@ export interface SubscriptionInput {
   email: string;
   member_id?: string | null;
   frequency: ReportFrequency;
+  report_type?: ReportType;
   enabled?: boolean;
   weekly_dow?: number | null;
   monthly_dom?: number | null;
@@ -147,6 +165,8 @@ export async function upsertSubscription(input: SubscriptionInput): Promise<Subs
     monthly_dom: input.monthly_dom ?? null,
   };
   if (input.send_hour != null) fields.send_hour = input.send_hour;
+  // Only touch report_type when provided, so other edits don't reset it.
+  if (input.report_type !== undefined) fields.report_type = input.report_type;
   // Only touch stores_override when explicitly provided, so frequency/enable
   // edits don't wipe a previously-assigned store scope.
   if (input.stores_override !== undefined) fields.stores_override = input.stores_override;

@@ -200,6 +200,18 @@ session); subscriptions key on `member_id`. Admins can optionally **pin stores**
 from the member's live `getMemberPermissions`. Override store options come from the company SIQ-1
 `getPermissions`.
 
+**Report type, test send, members view (2026-06-16 cont.).** Each subscription has a
+`report_type` (`store` = per-store Floorcare PDF(s), default; `portfolio` = one summary PDF across
+the member's stores) — column on `report_subscriptions`, selectable in the add form + per row. The
+portfolio PDF reuses a shared layout `src/utils/portfolioPdfLayout.ts` (browser `portfolioPdf.ts`
++ server `api/_lib/reportPdf.ts` → `renderPortfolioPdf`). The per-subscription send path is
+extracted to `api/_lib/sendReport.ts` (`sendReportForSubscription`), shared by the cron AND a
+**test-send** endpoint `POST /api/admin/send-report {id}` (admin-only) that renders now and emails
+the **signed-in admin** (not the recipient), without touching `last_sent_at` — the "Send test"
+button on each subscription row. `/settings/reports` also has a read-only **All members &
+permissions** view (`GET /api/admin/members` → roster + each member's Floorcare grants). Store
+pickers (override + permissions view) are dropdowns (`StoreDropdown`), not pill walls.
+
 **Needs work (NOT done):**
 - **Not verified end-to-end** — deployed, but no real email confirmed sent. Run the cron once
   (`curl -H "Authorization: Bearer $CRON_SECRET" <app>/api/cron/send-reports`) and confirm delivery.

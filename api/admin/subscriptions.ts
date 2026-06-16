@@ -80,6 +80,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email,
         member_id: typeof b.member_id === "string" ? b.member_id : null,
         frequency,
+        report_type:
+          b.report_type === "store" || b.report_type === "portfolio"
+            ? b.report_type
+            : undefined,
         enabled: typeof b.enabled === "boolean" ? b.enabled : true,
         weekly_dow: typeof b.weekly_dow === "number" ? b.weekly_dow : null,
         monthly_dom: typeof b.monthly_dom === "number" ? b.monthly_dom : null,
