@@ -91,7 +91,14 @@ export default function App() {
         <Route path="/my-store" element={<StoreManagerDashboard />} />
         <Route path="/report" element={<CustomDetailReport />} />
         <Route path="/tickets" element={<TicketsPage />} />
-        <Route path="/settings/scores" element={<ScoreSettings />} />
+        <Route
+          path="/settings/scores"
+          element={
+            <RequireAdmin>
+              <ScoreSettings />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="/settings/reports"
           element={

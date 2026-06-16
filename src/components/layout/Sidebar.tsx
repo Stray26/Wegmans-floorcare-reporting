@@ -44,8 +44,6 @@ interface NavItem {
   icon: React.ReactNode;
   /** show only for these access modes */
   modes?: ("portfolio" | "group" | "store")[];
-  /** show only to report admins */
-  adminOnly?: boolean;
 }
 
 const NAV: NavItem[] = [
@@ -68,29 +66,43 @@ const NAV: NavItem[] = [
     icon: <FileBarChart className="h-4 w-4" />,
   },
   { to: "/tickets", label: "Tickets", icon: <Ticket className="h-4 w-4" /> },
+];
+
+/**
+ * Admin section. Grouped under an "Admin" heading and shown only to report
+ * admins (the email allowlist; see useAuth().user.isAdmin). Score Settings was
+ * moved here 2026-06-16 (previously visible to all portfolio/group users). Both
+ * routes are also guarded by RequireAdmin in App.tsx, so hiding the nav link is
+ * not the only gate.
+ */
+const ADMIN_NAV: NavItem[] = [
   {
     to: "/settings/scores",
     label: "Score Settings",
     icon: <SlidersHorizontal className="h-4 w-4" />,
-    modes: ["portfolio", "group"],
   },
   {
     to: "/settings/reports",
     label: "Report Emails",
     icon: <Mail className="h-4 w-4" />,
-    adminOnly: true,
   },
 ];
+
+/** Shared NavLink class for sidebar links (active vs. idle states). */
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+    isActive
+      ? "bg-white/10 text-white"
+      : "text-white/70 hover:bg-white/5 hover:text-white"
+  );
 
 export function Sidebar() {
   const { accessMode } = useSmartInspectPermissions();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const items = NAV.filter(
-    (n) =>
-      (!n.modes || n.modes.includes(accessMode)) &&
-      (!n.adminOnly || user?.isAdmin)
-  );
+  const items = NAV.filter((n) => !n.modes || n.modes.includes(accessMode));
+  const adminItems = user?.isAdmin ? ADMIN_NAV : [];
 
   async function onSignOut() {
     await logout();
@@ -106,22 +118,25 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-2">
         {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-white/10 text-white"
-                  : "text-white/70 hover:bg-white/5 hover:text-white"
-              )
-            }
-          >
+          <NavLink key={item.to} to={item.to} className={navLinkClass}>
             {item.icon}
             {item.label}
           </NavLink>
         ))}
+
+        {adminItems.length > 0 && (
+          <>
+            <p className="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+              Admin
+            </p>
+            {adminItems.map((item) => (
+              <NavLink key={item.to} to={item.to} className={navLinkClass}>
+                {item.icon}
+                {item.label}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       <div className="border-t border-white/10 px-3 py-3">
