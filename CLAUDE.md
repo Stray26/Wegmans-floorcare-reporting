@@ -59,7 +59,7 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   Architecture). TopBar now just holds the date filter + user/sign-out.
 - **Admin "Report Emails" page (`/settings/reports`).** Admins add/edit/pause/delete scheduled-
   report recipients + cadence and can **manually assign stores** for recipients who haven't logged
-  in. Admin = email allowlist (default `vmaione@mysmartinspect.com`, extend via `REPORT_ADMIN_EMAILS`),
+  in. Admin = email allowlist (default `vincent.maione1@gmail.com`, extend via `REPORT_ADMIN_EMAILS`),
   server-enforced; `isAdmin` via `/api/auth/me`; `/api/admin/subscriptions` does the CRUD.
 - **⚠️ Scheduled emails are NOT yet verified end-to-end** — deployed, but no real send confirmed.
   See "Needs work" in the Scheduled report emails section.
@@ -196,7 +196,7 @@ Full setup, env vars, and limitations: `docs/scheduled-reports.md`.
 
 **Admin config.** Report admins manage recipients + cadence at `/settings/reports`
 (`src/pages/ReportSettings.tsx`, behind `RequireAdmin`; admin-only Sidebar link). Admin = session
-email on an allowlist: `REPORT_ADMIN_EMAILS` env ∪ a code default (`vmaione@mysmartinspect.com`),
+email on an allowlist: `REPORT_ADMIN_EMAILS` env ∪ a code default (`vincent.maione1@gmail.com`),
 checked in `api/_lib/session.ts` (`isAdminSession`); `publicIdentity` / `/api/auth/me` expose
 `isAdmin`. CRUD goes through `api/admin/subscriptions.ts` (session + admin gated; service-role
 writes). The recipient picker is the **live SI member roster** (`listMembers` via the admin
@@ -244,7 +244,7 @@ Scheduled report emails (server-side too): `SUPABASE_URL`
 (`https://mjhuujbwkkfjmzfmzqol.supabase.co`), `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`,
 `REPORT_EMAIL_FROM` (verified Resend sender, e.g. `Wegmans Floorcare <reports@mysmartinspect.com>`),
 `CRON_SECRET` (cron auth — the cron refuses to run without it), `REPORT_ADMIN_EMAILS`
-(comma-separated extra report-admin emails; `vmaione@mysmartinspect.com` is a built-in default),
+(comma-separated extra report-admin emails; `vincent.maione1@gmail.com` is a built-in default),
 `SI_ADMIN_USERNAME` + `SI_ADMIN_PASSWORD` (an SI Account-role service login the cron uses to pull
 members' live store permissions via `getMemberPermissions`/`listMembers`).
 See `docs/scheduled-reports.md`.

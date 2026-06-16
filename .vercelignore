@@ -18,6 +18,9 @@ dist
 install.out
 install.status
 
+# captured HAR files — large and contain SI session tokens; never ship
+*.har
+
 # os / editor
 .DS_Store
 .vscode
