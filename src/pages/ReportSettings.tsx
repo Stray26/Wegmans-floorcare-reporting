@@ -30,18 +30,28 @@ interface RecipientSummary {
   stores: StoreRef[];
   captured_at: string;
 }
+interface MemberStore {
+  configId: string;
+  configName: string;
+  outerTierId: string;
+  storeName: string;
+}
 interface MemberRef {
   memberId: string;
   email: string;
   displayName: string;
   roleId: string | null;
   canGetReports: boolean;
+  stores?: MemberStore[];
 }
 interface AdminData {
   subscriptions: SubscriptionRow[];
   members: MemberRef[];
   recipients: RecipientSummary[];
   availableStores: StoreRef[];
+}
+interface MembersData {
+  members: (MemberRef & { stores: MemberStore[] })[];
 }
 
 const selectCls =
@@ -100,6 +110,15 @@ export function ReportSettings() {
         jsonOrThrow
       ) as Promise<AdminData>,
   });
+  // Live roster + each member's Floorcare store permissions. Separate (heavier)
+  // query so it can't slow the subscriptions list / picker.
+  const membersQuery = useQuery<MembersData>({
+    queryKey: ["admin-members"],
+    queryFn: () =>
+      fetch("/api/admin/members", { credentials: "same-origin" }).then(
+        jsonOrThrow
+      ) as Promise<MembersData>,
+  });
 
   const [memberId, setMemberId] = React.useState("");
   const [frequency, setFrequency] = React.useState<Frequency>("weekly");
@@ -134,12 +153,16 @@ export function ReportSettings() {
   const subs = data?.subscriptions ?? [];
   const recipients = data?.recipients ?? [];
   const stores = data?.availableStores ?? [];
-  // Picker options: the live SI roster when available, else captured recipients
-  // (so the page still works if the admin service account isn't configured).
-  const members = data?.members ?? [];
+  // Full live roster (with permissions) from /api/admin/members.
+  const allMembers = membersQuery.data?.members ?? [];
+  // Picker options: prefer the full live roster, else the lightweight roster
+  // from the subscriptions endpoint, else captured recipients (so the page
+  // still works if the admin service account isn't configured).
+  const rosterForPicker: MemberRef[] =
+    allMembers.length > 0 ? allMembers : data?.members ?? [];
   const pickerOptions: MemberRef[] =
-    members.length > 0
-      ? members
+    rosterForPicker.length > 0
+      ? rosterForPicker
       : recipients.map((r) => ({
           memberId: r.member_id,
           email: r.email,
@@ -183,6 +206,21 @@ export function ReportSettings() {
             variant: "success",
           });
         },
+      }
+    );
+  }
+
+  /** Quick-subscribe a member straight from the roster, at the chosen frequency. */
+  function subscribeMember(m: MemberRef) {
+    save.mutate(
+      { email: m.email, frequency, member_id: m.memberId },
+      {
+        onSuccess: () =>
+          toast({
+            title: "Subscription saved",
+            description: `${m.displayName} · ${frequency}`,
+            variant: "success",
+          }),
       }
     );
   }
@@ -371,6 +409,77 @@ export function ReportSettings() {
                         </div>
                       </div>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-5">
+        <CardHeader>
+          <CardTitle>All members &amp; permissions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {membersQuery.isLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Loading members…</p>
+          ) : membersQuery.isError ? (
+            <div className="py-4 text-sm">
+              <p className="text-status-failed">
+                {(membersQuery.error as Error)?.message ?? "Couldn’t load members."}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The roster is pulled live from Smart Inspect via the admin service account. Set{" "}
+                <code>SI_ADMIN_USERNAME</code> / <code>SI_ADMIN_PASSWORD</code> in this environment
+                (and deploy this build) to see all members and their store permissions.
+              </p>
+            </div>
+          ) : allMembers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No members found.</p>
+          ) : (
+            <div className="space-y-2">
+              {allMembers.map((m) => {
+                const added = subbedMemberIds.has(m.memberId);
+                return (
+                  <div
+                    key={m.memberId}
+                    className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-[180px] flex-1">
+                      <div className="font-medium">{m.displayName}</div>
+                      <div className="text-xs text-muted-foreground">{m.email}</div>
+                    </div>
+                    <span
+                      className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                      title={m.canGetReports ? "Can receive reports" : "No report permission"}
+                    >
+                      {m.roleId ?? "—"}
+                      {m.canGetReports ? "" : " · no reports"}
+                    </span>
+                    <div className="flex flex-[2] flex-wrap gap-1.5">
+                      {m.stores.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">No Floorcare stores</span>
+                      ) : (
+                        m.stores.map((s, i) => (
+                          <span
+                            key={`${m.memberId}-${i}`}
+                            title={s.configName}
+                            className="rounded-md border border-border bg-card px-2 py-0.5 text-xs"
+                          >
+                            {s.storeName}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={save.isPending || added}
+                      onClick={() => subscribeMember(m)}
+                    >
+                      {added ? "Added" : "Subscribe"}
+                    </Button>
                   </div>
                 );
               })}
