@@ -2,7 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/context/SessionContext";
+import { useSession, ALL_CONFIGS } from "@/context/SessionContext";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import type { StoreReport } from "@/types/reporting";
 
@@ -65,24 +65,38 @@ export function FilterDrawer({
 }) {
   const { dateRange, setDateRange, setConfigFilter } = useSession();
   const { configs, activeConfig } = useSmartInspectPermissions();
+  // useSmartInspectPermissions rebuilds `activeConfig` as a NEW object every
+  // render, so derive a stable primitive (the config name) to drive the re-sync
+  // effect. Depending on the object reset the in-drawer selection on every
+  // render, so the Config dropdown couldn't be changed.
+  const activeConfigName = activeConfig?.configName ?? null;
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<PortfolioFilters>(filters);
   const [draftConfig, setDraftConfig] = React.useState<string | null>(
-    activeConfig?.configName ?? null
+    activeConfigName
   );
 
   React.useEffect(() => {
+    // Re-sync the draft only when the drawer OPENS (or the applied config /
+    // filters change) — never on every render, or it clobbers the user's
+    // in-drawer selection before they can apply it.
     if (open) {
       setDraft(filters);
-      setDraftConfig(activeConfig?.configName ?? null);
+      setDraftConfig(activeConfigName);
     }
-  }, [open, filters, activeConfig]);
+  }, [open, filters, activeConfigName]);
 
   const configNames = configs.map((c) => c.configName);
-  // Store options cascade from the DRAFT config's permitted stores.
+  const multiConfig = configNames.length > 1;
+  // Store options cascade from the DRAFT config's permitted stores ("All
+  // configs" unions every program's stores; dedupe shared store names).
   const draftConfigStores =
-    configs.find((c) => c.configName === draftConfig)?.stores ?? [];
-  const storeNames = draftConfigStores.map((s) => s.storeName).sort();
+    draftConfig === ALL_CONFIGS
+      ? configs.flatMap((c) => c.stores)
+      : (configs.find((c) => c.configName === draftConfig)?.stores ?? []);
+  const storeNames = [
+    ...new Set(draftConfigStores.map((s) => s.storeName)),
+  ].sort();
   const inspectors = [
     ...new Set(stores.flatMap((s) => s.history.map((h) => h.inspector))),
   ].sort();
@@ -163,6 +177,7 @@ export function FilterDrawer({
                 }}
                 className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
+                {multiConfig && <option value={ALL_CONFIGS}>All Configs</option>}
                 {configNames.map((name) => (
                   <option key={name} value={name}>
                     {name}

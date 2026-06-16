@@ -31,8 +31,10 @@ export function PortfolioOverview() {
   const {
     stores: permittedStores,
     accessMode,
-    activeConfig,
+    configLabel,
+    isAllConfigs,
   } = useSmartInspectPermissions();
+  const program = configLabel || "Wegmans Floorcare Compliance";
   const {
     data: portfolio,
     isLoading,
@@ -48,7 +50,6 @@ export function PortfolioOverview() {
     setExporting(true);
     toast({ title: "Generating PDF", description: "Building the portfolio report…" });
     try {
-      const program = activeConfig?.configName ?? "Wegmans Floorcare Compliance";
       await exportPortfolioPdf(portfolio, {
         dateStart: dateRange.start,
         dateEnd: dateRange.end,
@@ -108,9 +109,7 @@ export function PortfolioOverview() {
       <PageHeader
         title="Portfolio Overview"
         subtitle={
-          accessMode === "group"
-            ? `${activeConfig?.configName ?? "Wegmans Floorcare Compliance"} · Region view`
-            : (activeConfig?.configName ?? "Wegmans Floorcare Compliance")
+          accessMode === "group" ? `${program} · Region view` : program
         }
         actions={
           <>
@@ -204,6 +203,7 @@ export function PortfolioOverview() {
               stores={stores}
               search={search}
               statusFilter={statusFilter}
+              showConfig={isAllConfigs}
               onRowClick={setSelected}
             />
           </CardContent>

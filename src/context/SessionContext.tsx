@@ -29,6 +29,13 @@ interface SessionContextValue {
 
 const SessionContext = React.createContext<SessionContextValue | null>(null);
 
+/**
+ * Sentinel `configFilter` value meaning "show every permitted config at once"
+ * (the corporate all-stores view). Distinct from null, which means "default to
+ * the first permitted config" — so the normal default stays single-config.
+ */
+export const ALL_CONFIGS = "__all_configs__";
+
 const CONFIG_FILTER_KEY = "wegmans-portal.configFilter";
 
 function defaultRange(): DateRange {

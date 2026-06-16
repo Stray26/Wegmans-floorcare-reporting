@@ -5,7 +5,7 @@ import {
   permittedConfigs,
   type PermittedConfig,
 } from "@/api/smartInspectClient";
-import { useSession } from "@/context/SessionContext";
+import { useSession, ALL_CONFIGS } from "@/context/SessionContext";
 import { useAuth } from "@/context/AuthContext";
 import type { StoreMeta } from "@/api/reportingTransforms";
 
@@ -41,11 +41,28 @@ export function useSmartInspectPermissions() {
     : [];
   const allStores: StoreMeta[] = query.data ? permittedStores(query.data) : [];
 
+  // "All configs" is the corporate all-stores view spanning every program.
+  const isAllConfigs = configFilter === ALL_CONFIGS && configs.length > 0;
+
   // Active config: the session filter when it matches a permitted config,
   // otherwise the first permitted one (covers stale filters after re-login).
-  const activeConfig =
-    configs.find((c) => c.configName === configFilter) ?? configs[0] ?? null;
-  const stores: StoreMeta[] = activeConfig?.stores ?? allStores;
+  // null when "All configs" is selected (no single active program).
+  const activeConfig = isAllConfigs
+    ? null
+    : (configs.find((c) => c.configName === configFilter) ?? configs[0] ?? null);
+
+  // Stores the dashboards show. For "All configs" it's the union of every
+  // config's stores — each StoreMeta keeps its own configId/name, so the same
+  // physical store can appear once per config it belongs to (in production each
+  // store lives in a single config, so that's naturally one row per store).
+  const stores: StoreMeta[] = isAllConfigs
+    ? configs.flatMap((c) => c.stores)
+    : (activeConfig?.stores ?? allStores);
+
+  // Human label for the active scope (page headers, export titles).
+  const configLabel = isAllConfigs
+    ? "All Configs"
+    : (activeConfig?.configName ?? "");
 
   // Role-based: Account -> portfolio, everyone else -> store manager. In demo
   // mode there's no live SI role, so fall back to store-count (keeps the mock
@@ -76,6 +93,10 @@ export function useSmartInspectPermissions() {
     /** Permitted configs (inspection programs), each with its stores. */
     configs,
     activeConfig,
+    /** True when the "All configs" (all-stores) scope is selected. */
+    isAllConfigs,
+    /** Display label for the active scope ("All Configs" or the config name). */
+    configLabel,
     buildingIds: stores.map((s) => s.buildingId),
     accessMode,
     userName,

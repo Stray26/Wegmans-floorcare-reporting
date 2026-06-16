@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { formatScore, formatRelativeDays } from "@/utils/formatting";
 import type { StoreReport, ScoreStatus } from "@/types/reporting";
 
-type SortKey = "store" | "qsp" | "uploaded" | "status" | "tickets";
+type SortKey = "store" | "config" | "qsp" | "uploaded" | "status" | "tickets";
 
 const STATUS_ORDER: Record<ScoreStatus, number> = {
   failed: 0,
@@ -28,11 +28,14 @@ export function StorePerformanceTable({
   stores,
   search,
   statusFilter,
+  showConfig = false,
   onRowClick,
 }: {
   stores: StoreReport[];
   search: string;
   statusFilter: ScoreStatus | null;
+  /** Show a Config column (used by the "All configs" portfolio view). */
+  showConfig?: boolean;
   onRowClick: (store: StoreReport) => void;
 }) {
   const [sortKey, setSortKey] = React.useState<SortKey>("qsp");
@@ -61,6 +64,8 @@ export function StorePerformanceTable({
       switch (sortKey) {
         case "store":
           return a.storeName.localeCompare(b.storeName) * dir;
+        case "config":
+          return a.configurationName.localeCompare(b.configurationName) * dir;
         case "qsp":
           return ((a.qspScore ?? -1) - (b.qspScore ?? -1)) * dir;
         case "uploaded":
@@ -111,6 +116,7 @@ export function StorePerformanceTable({
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <SortHead label="Store" k="store" />
+            {showConfig && <SortHead label="Config" k="config" />}
             <TableHead>City / State</TableHead>
             <SortHead label="Last Uploaded" k="uploaded" />
             <SortHead label="QSP Score" k="qsp" />
@@ -127,6 +133,11 @@ export function StorePerformanceTable({
               className="cursor-pointer"
             >
               <TableCell className="font-medium">{s.storeName}</TableCell>
+              {showConfig && (
+                <TableCell className="text-muted-foreground">
+                  {s.configurationName}
+                </TableCell>
+              )}
               <TableCell className="text-muted-foreground">
                 {s.city}, {s.state}
               </TableCell>
@@ -156,7 +167,7 @@ export function StorePerformanceTable({
           {pageRows.length === 0 && (
             <TableRow className="hover:bg-transparent">
               <TableCell
-                colSpan={7}
+                colSpan={showConfig ? 8 : 7}
                 className="py-10 text-center text-muted-foreground"
               >
                 No stores match the current filters.

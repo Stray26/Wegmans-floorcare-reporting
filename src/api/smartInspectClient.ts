@@ -226,7 +226,45 @@ function configOf(stores: StoreMeta[]): { configId: string; configName: string }
   };
 }
 
+/**
+ * Group stores by their config (program). runWidgets matches configs BY NAME
+ * and outerTierIds are per-config, so a multi-config selection ("All configs")
+ * must fetch each program separately and merge the results.
+ */
+function groupStoresByConfig(stores: StoreMeta[]): StoreMeta[][] {
+  const groups = new Map<string, StoreMeta[]>();
+  for (const s of stores) {
+    const key = s.configName ?? FLOORCARE_CONFIG.configurationName;
+    const arr = groups.get(key);
+    if (arr) arr.push(s);
+    else groups.set(key, [s]);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Fetch records/tickets/images for a set of stores. Stores spanning multiple
+ * configs (the "All configs" view) are fetched one program at a time and
+ * merged — a single runWidgets call only matches one config name.
+ */
 async function fetchRecordsAndTickets(
+  stores: StoreMeta[],
+  dateRange: DateRange
+): Promise<{ records: SIRecord[]; tickets: SITicket[]; images: SIRawRecord[] }> {
+  const groups = groupStoresByConfig(stores);
+  if (groups.length <= 1) return fetchConfigRecordsAndTickets(stores, dateRange);
+  const results = await Promise.all(
+    groups.map((g) => fetchConfigRecordsAndTickets(g, dateRange))
+  );
+  return {
+    records: results.flatMap((r) => r.records),
+    tickets: results.flatMap((r) => r.tickets),
+    images: results.flatMap((r) => r.images),
+  };
+}
+
+/** Fetch one config's records/tickets/images (all stores share a config here). */
+async function fetchConfigRecordsAndTickets(
   stores: StoreMeta[],
   dateRange: DateRange
 ): Promise<{ records: SIRecord[]; tickets: SITicket[]; images: SIRawRecord[] }> {
