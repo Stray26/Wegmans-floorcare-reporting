@@ -26,12 +26,14 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
 - **Wegmans-green rebrand**: Tailwind `brand` palette (#006938) replaced `navy`; status colors
   unchanged. Sidebar shows the logo from `/public/wegmans-logo.png` on a white chip (white-bg
   PNG, so don't CSS-invert it — that makes a white square).
-- **Runtime Demo-data toggle** (TopBar Live/Demo) flips the whole app between live SI and a
-  ~100-store mock Wegmans portfolio without redeploy. See architecture note below.
+- **Demo-data mode** flips the whole app between live SI and a ~100-store mock Wegmans portfolio.
+  The TopBar Live/Demo + role toggles were **removed 2026-06-15** (real users on it); the machinery
+  stays dormant in `SessionContext` so `npm run dev` is still mock and prod is live-only
+  (`VITE_ENABLE_MOCK_DATA=false`). Re-addable if a sales-demo build is needed.
 - **PDF exports are real** (jsPDF + jspdf-autotable, lazy-loaded): `src/utils/storePdf.ts`
   (My Store report) and `src/utils/portfolioPdf.ts` (landscape portfolio report). Wired to the
   Export buttons on Store Manager and Portfolio Overview.
-### 2026-06-15 session (uncommitted as of this writing)
+### 2026-06-15 session (shipped)
 
 - **Default view = Today + global date filter.** Every dashboard lands on Today
   (`SessionContext.defaultRange`). Quick-picks (Today · Yesterday · 7d · 30d · 90d + custom) moved
@@ -53,6 +55,14 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
 - **Scheduled report emails.** Daily Vercel Cron emails curated recipients their store PDF via
   Resend; per-user stores captured at login into Supabase. See the Scheduled report emails section
   + `docs/scheduled-reports.md`. **Live path only.**
+- **Demo/role toggles removed from the TopBar** (real users on it); machinery stays dormant (see
+  Architecture). TopBar now just holds the date filter + user/sign-out.
+- **Admin "Report Emails" page (`/settings/reports`).** Admins add/edit/pause/delete scheduled-
+  report recipients + cadence and can **manually assign stores** for recipients who haven't logged
+  in. Admin = email allowlist (default `vmaione@mysmartinspect.com`, extend via `REPORT_ADMIN_EMAILS`),
+  server-enforced; `isAdmin` via `/api/auth/me`; `/api/admin/subscriptions` does the CRUD.
+- **⚠️ Scheduled emails are NOT yet verified end-to-end** — deployed, but no real send confirmed.
+  See "Needs work" in the Scheduled report emails section.
 
 - **Deferred**: real Excel export (Custom Detail Report still toast-mocks Excel/PDF), wiring the
   store PDF into the Store Detail modal, mobile-polish pass.
@@ -62,8 +72,9 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
 React 18 + Vite + TypeScript + Tailwind + shadcn-style UI (hand-rolled on Radix) +
 TanStack Query + Recharts + React Router. Deployed on **Vercel** with serverless
 functions in `/api`. The SI data proxy is plain Vercel functions (no DB). **Supabase**
-(project `mjhuujbwkkfjmzfmzqol`) was added 2026-06-15 for the **scheduled-report feature only**
-(recipient permissions + subscriptions) — see that section.
+(project `mjhuujbwkkfjmzfmzqol`, named "Wegmans Reports" — repurposed 2026-06-15 from the old
+MeasureIQ project, which had moved to AWS; MeasureIQ's tables were dropped) backs the
+**scheduled-report feature only** (recipient permissions + subscriptions) — see that section.
 
 ## Commands
 
@@ -78,14 +89,14 @@ vercel --prod      # deploy (uploads working dir, respects .vercelignore)
 
 ## Architecture (the important part)
 
-**Mock ↔ live swap with zero UI changes.** `VITE_ENABLE_MOCK_DATA` (`"false"` => live) sets
-the INITIAL value (`DEFAULT_MOCK`), but mock mode is now **runtime-switchable**:
-`isMockMode()` / `setMockMode()` in `src/api/smartInspectClient.ts`. The TopBar **Live/Demo
-toggle** drives `demoData` in `SessionContext`, which calls `setMockMode()` **synchronously in
-the setter** (NOT in an effect — an effect runs after the permissions query refetches, which
-gave the "Demo shows 3 uninspected" bug: live permissions + mock data). All data hooks include
-`demoData` in their query keys so toggling refetches. Demo = ~100-store mock Wegmans portfolio;
-the Corporate/Region/Store-Manager role toggle only matters in Demo.
+**Mock ↔ live swap.** `VITE_ENABLE_MOCK_DATA` (`"false"` => live) sets `DEFAULT_MOCK`; mock mode is
+runtime-switchable via `isMockMode()`/`setMockMode()` (`src/api/smartInspectClient.ts`) driven by
+`demoData` in `SessionContext`. The setter calls `setMockMode()` **synchronously** (NOT in an
+effect — an effect refetches permissions before the flag flips, the "Demo shows 3 uninspected"
+bug: live permissions + mock data). All data hooks key on `demoData` so toggling refetches.
+**The TopBar Live/Demo + role toggles were removed 2026-06-15** (real users on it) — the machinery
+is dormant: `npm run dev` is still mock, prod is live-only. Demo = ~100-store mock portfolio; the
+role toggle only ever mattered in Demo.
 
 Data flow: `raw SI response → transforms → normalized reporting types → UI`.
 - `src/types/smartInspect.ts` — RAW SI shapes + `transformApiRecord` (raw allRecords row → `SIRecord`) + `extractPermittedOuterTiers`.
@@ -97,7 +108,8 @@ Data flow: `raw SI response → transforms → normalized reporting types → UI
 
 **Permissions are the source of truth.** `useSmartInspectPermissions` reads SI permissions →
 `stores.length` decides the view: >5 = Portfolio, 2–5 = scaled Portfolio (group), 1 = Store Manager.
-A demo role toggle (Corporate/Region/Store Manager) in the top bar is mock-only.
+(The Corporate/Region/Store-Manager demo role toggle was removed from the top bar 2026-06-15; it
+was mock-only.)
 
 **Score thresholds** live in `src/config/scoreThresholds.ts` behind `useScoreThresholds`
 (provider, in-memory editable, DB-ready). QSP = acceptable/total × 100.
@@ -156,6 +168,31 @@ Full setup, env vars, and limitations: `docs/scheduled-reports.md`.
 > were added there (not only in `tsconfig.app.json`) to let functions import `@/…` — that's how the
 > cron reuses the shared transforms + PDF layout. Don't remove them.
 
+**Admin config.** Report admins manage recipients + cadence at `/settings/reports`
+(`src/pages/ReportSettings.tsx`, behind `RequireAdmin`; admin-only Sidebar link). Admin = session
+email on an allowlist: `REPORT_ADMIN_EMAILS` env ∪ a code default (`vmaione@mysmartinspect.com`),
+checked in `api/_lib/session.ts` (`isAdminSession`); `publicIdentity` / `/api/auth/me` expose
+`isAdmin`. CRUD goes through `api/admin/subscriptions.ts` (session + admin gated; service-role
+writes). Admins can **manually assign stores** to a subscription
+(`report_subscriptions.stores_override` jsonb) for recipients who haven't logged in — the cron
+prefers the override, else the captured stores, and no longer needs a `report_recipients` row.
+Picker options come from the company SIQ-1 `getPermissions`.
+
+**Needs work (NOT done):**
+- **Not verified end-to-end** — deployed, but no real email confirmed sent. Run the cron once
+  (`curl -H "Authorization: Bearer $CRON_SECRET" <app>/api/cron/send-reports`) and confirm delivery.
+- A recipient gets mail only if they've logged in (captured stores) OR have a manual store
+  assignment; otherwise the cron reports `skipped`.
+- `send_hour` is stored but NOT enforced — the single daily cron (`0 11 * * *`, 11:00 UTC) sends at one time.
+- Cron processes recipients sequentially — fine for a few; batch/fan-out before scaling (function timeout).
+- Manual store assignment is admin-asserted, NOT validated against the recipient's own SI permissions.
+- Couldn't auto-pull a not-logged-in member's SI stores (SI returns them only to that member's own
+  session); the "admin SI lookup" path (probe `fullPermissions` / admin getPermissions) was deferred.
+- Emailed-PDF logo is bundled via `vercel.json` `includeFiles`; falls back to a text header if not
+  found at runtime — confirm it renders on deploy.
+- Resend sends from the verified `mysmartinspect.com` domain; the admin allowlist matches the SI
+  **login** email (so admin only works if the SI account email is on the list).
+
 ## Env vars
 
 Server-side (no `VITE_` prefix, never in browser): `SMART_INSPECT_API_TOKEN`,
@@ -164,8 +201,10 @@ Server-side (no `VITE_` prefix, never in browser): `SMART_INSPECT_API_TOKEN`,
 `SMART_INSPECT_COMPANY_ID` (default 1382 = Wegmans).
 Scheduled report emails (server-side too): `SUPABASE_URL`
 (`https://mjhuujbwkkfjmzfmzqol.supabase.co`), `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`,
-`REPORT_EMAIL_FROM` (verified Resend sender), `CRON_SECRET` (cron auth — the cron refuses to run
-without it). See `docs/scheduled-reports.md`.
+`REPORT_EMAIL_FROM` (verified Resend sender, e.g. `Wegmans Floorcare <reports@mysmartinspect.com>`),
+`CRON_SECRET` (cron auth — the cron refuses to run without it), `REPORT_ADMIN_EMAILS`
+(comma-separated extra report-admin emails; `vmaione@mysmartinspect.com` is a built-in default).
+See `docs/scheduled-reports.md`.
 Frontend: `VITE_ENABLE_MOCK_DATA` (`false` in prod), `VITE_APP_ENV`.
 All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also writes a `VERCEL_OIDC_TOKEN` there).
 
