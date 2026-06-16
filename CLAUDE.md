@@ -128,7 +128,13 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   pilot store that lives in N configs counts N× — correct in production (one config per store),
   inflated in the pilot.
 - **Frontend-only — no Vercel/env/dep changes.** No new env vars, API routes, or packages; lockfile
-  untouched. Ships via the normal main → Vercel deploy.
+  untouched — nothing to change in Vercel; deploys via the normal `main` → Vercel build.
+- **STATUS (resume here): committed on branch `feature/admin-nav-and-config-filter`, NOT yet
+  pushed/merged/deployed.** Ship it: `git push -u origin feature/admin-nav-and-config-filter` → merge to
+  `main` → Vercel auto-deploys prod. **The Admin section is admin-only, so it does NOT appear in
+  `npm run dev`** (demo bypasses login → no `isAdmin`; Score Settings is hidden in demo now too) — verify
+  it on the deployed site signed in as `vincent.maione1@gmail.com`. The config-filter fix + All Configs DO
+  show in demo (boss has >1 config).
 
 ## Stack
 
