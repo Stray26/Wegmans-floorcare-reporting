@@ -64,6 +64,8 @@ export interface SubscriptionRow {
   monthly_dom: number | null; // 1..28
   send_hour: number; // 0..23
   last_sent_at: string | null;
+  /** Admin-assigned store scope; when set, overrides the recipient's captured stores. */
+  stores_override: RecipientStore[] | null;
 }
 
 /** All enabled subscriptions. Empty if Supabase isn't configured. */
@@ -116,6 +118,7 @@ export interface SubscriptionInput {
   weekly_dow?: number | null;
   monthly_dom?: number | null;
   send_hour?: number;
+  stores_override?: RecipientStore[] | null;
 }
 
 export async function listSubscriptions(): Promise<SubscriptionRow[]> {
@@ -135,15 +138,18 @@ export async function listSubscriptions(): Promise<SubscriptionRow[]> {
 export async function upsertSubscription(input: SubscriptionInput): Promise<SubscriptionRow> {
   const db = getSupabaseAdmin();
   if (!db) throw new Error("Supabase is not configured.");
-  const fields = {
+  const fields: Record<string, unknown> = {
     email: input.email.trim(),
     member_id: input.member_id ?? null,
     frequency: input.frequency,
     enabled: input.enabled ?? true,
     weekly_dow: input.weekly_dow ?? null,
     monthly_dom: input.monthly_dom ?? null,
-    ...(input.send_hour != null ? { send_hour: input.send_hour } : {}),
   };
+  if (input.send_hour != null) fields.send_hour = input.send_hour;
+  // Only touch stores_override when explicitly provided, so frequency/enable
+  // edits don't wipe a previously-assigned store scope.
+  if (input.stores_override !== undefined) fields.stores_override = input.stores_override;
   const { data, error } = input.id
     ? await db.from("report_subscriptions").update(fields).eq("id", input.id).select()
     : await db.from("report_subscriptions").insert(fields).select();

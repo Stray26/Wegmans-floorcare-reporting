@@ -139,17 +139,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (const sub of due) {
     try {
       const recipient = await getRecipient({ memberId: sub.member_id, email: sub.email });
-      const stores = (recipient?.stores ?? []) as RecipientStore[];
-      if (!recipient || stores.length === 0) {
+      // Admin-assigned stores win; otherwise use what was captured at login.
+      const override = Array.isArray(sub.stores_override) ? sub.stores_override : null;
+      const stores = (override && override.length > 0
+        ? override
+        : recipient?.stores ?? []) as RecipientStore[];
+      if (stores.length === 0) {
         results.push({
           email: sub.email,
           status: "skipped",
-          detail: "no captured stores (has the recipient logged in to the portal yet?)",
+          detail: "no stores — recipient hasn't logged in and no manual store assignment",
         });
         continue;
       }
-      const configName = recipient.config_name ?? FLOORCARE_CONFIG.configurationName;
-      const configId = recipient.config_id ?? String(FLOORCARE_CONFIG.configId);
+      const configName = recipient?.config_name ?? FLOORCARE_CONFIG.configurationName;
+      const configId = recipient?.config_id ?? String(FLOORCARE_CONFIG.configId);
       const range = isoRange(windowDays(sub.frequency));
 
       const { records, tickets } = await fetchStoreData(
@@ -168,7 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sendEmail({
         to: sub.email,
         subject: `Wegmans Floorcare ${sub.frequency} report — ${range.end}`,
-        html: `<p>Hi${recipient.display_name ? " " + recipient.display_name : ""},</p>
+        html: `<p>Hi${recipient?.display_name ? " " + recipient.display_name : ""},</p>
 <p>Attached is your ${sub.frequency} Wegmans Floorcare compliance report for <strong>${storeList}</strong> (covering ${range.start} to ${range.end}).</p>
 <p style="color:#6e747c;font-size:12px">Wegmans Floorcare Compliance · powered by Smart Inspect</p>`,
         attachments,
