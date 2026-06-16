@@ -1,0 +1,8 @@
+{
+  "// note": "Type-checks the Vercel serverless functions in /api (which the app build's tsc -b does NOT cover — those are bundled by Vercel's esbuild). Run with: npm run typecheck:api. Vercel itself ignores this file.",
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["api"]
+}
