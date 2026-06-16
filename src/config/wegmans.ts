@@ -20,6 +20,38 @@ export const FLOORCARE_CONFIG = {
   timezone: "America/New_York",
 } as const;
 
+/**
+ * Smart Inspect configs this portal reports on. Wegmans (companyId 1382) has
+ * several configs; the Floorcare ones are the original pilot (20035) plus the
+ * Pre-/Post-Launch variants per vendor (ABS / CSG / Tec Services). The big
+ * general "Wegmans" config (19399, ~100 stores) is intentionally EXCLUDED so a
+ * member granted that config doesn't trigger ~100 store PDFs in one email.
+ * (Discovered via the 2026-06-16 fullPermissions/getMemberPermissions HAR.)
+ */
+export const FLOORCARE_CONFIG_IDS: number[] = [
+  20035, // Wegmans Floorcare Pilot (original)
+  20633, // Pre-Launch - CSG
+  20634, // Post-Launch - CSG
+  20635, // Pre-Launch - Tec Services
+  20636, // Post-Launch - Tec Services
+  20637, // Pre-Launch - ABS
+  20639, // Post-Launch - ABS
+];
+
+/**
+ * True if a config belongs to the Floorcare program (so the scheduled report
+ * should include it). Matches by known id OR by name containing "Floorcare",
+ * which is robust if new Floorcare configs are added later.
+ */
+export function isFloorcareConfig(cfg: {
+  configId?: string | number | null;
+  configName?: string | null;
+}): boolean {
+  const id = cfg.configId != null ? Number(cfg.configId) : NaN;
+  if (!Number.isNaN(id) && FLOORCARE_CONFIG_IDS.includes(id)) return true;
+  return /floorcare/i.test(cfg.configName ?? "");
+}
+
 /** The 10 floorcare check areas (bilingual). */
 export const CHECK_AREAS: { id: string; label: string }[] = [
   { id: "ca-vestibules", label: "Vestibules / Vestibulos" },

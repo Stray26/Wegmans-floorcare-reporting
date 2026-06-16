@@ -1,15 +1,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { siPost } from "../_lib/smartInspect.js";
+import {
+  siPost,
+  listCompanyMembers,
+  getMemberStoreGrants,
+  type CompanyMember,
+  type MemberStoreGrant,
+} from "../_lib/smartInspect.js";
 import {
   getEnabledSubscriptions,
-  getRecipient,
   markSubscriptionSent,
   type SubscriptionRow,
-  type RecipientStore,
 } from "../_lib/supabase.js";
 import { sendEmail } from "../_lib/email.js";
 import { renderStorePdf } from "../_lib/reportPdf.js";
-import { FLOORCARE_CONFIG } from "@/config/wegmans";
+import { FLOORCARE_CONFIG, isFloorcareConfig } from "@/config/wegmans";
 import { DEFAULT_THRESHOLDS } from "@/config/scoreThresholds";
 import { transformApiRecord } from "@/types/smartInspect";
 import { transformStoreReport, type StoreMeta } from "@/api/reportingTransforms";
@@ -24,12 +28,19 @@ import type { StoreReport } from "@/types/reporting";
 /**
  * GET /api/cron/send-reports — daily Vercel Cron (see vercel.json).
  *
- * Reads enabled subscriptions, sends the ones due today (daily / weekly DOW /
- * monthly DOM), scopes each by the recipient's captured Smart Inspect stores,
- * renders their store PDF(s) server-side, and emails via Resend. The company
- * SIQ-1 token fetches the data (no user session in a cron); store scoping comes
- * from report_recipients, captured at the user's login.
+ * Reads enabled subscriptions and sends the ones due today (daily / weekly DOW /
+ * monthly DOM). Store scope is pulled LIVE per member: the cron logs in as the
+ * SI admin service account and calls listMembers + getMemberPermissions to get
+ * each subscriber's current Floorcare store grants (no login-capture needed,
+ * never stale). The company SIQ-1 token still fetches the inspection data.
+ *
+ * Precedence for store scope:
+ *   1. explicit admin override (subscription.stores_override) — wins if set
+ *   2. the member's live Smart Inspect permissions (Floorcare configs only)
  */
+
+/** Safety cap: never attach more than this many store PDFs to a single email. */
+const MAX_STORES_PER_EMAIL = 30;
 
 function widgetArray<T>(value: unknown): T[] {
   if (Array.isArray(value)) return value as T[];
@@ -100,7 +111,7 @@ async function fetchStoreData(
 }
 
 function buildStoreReport(
-  store: RecipientStore,
+  store: { outerTierId: string; name: string },
   configName: string,
   configId: string,
   range: { start: string; end: string },
@@ -136,49 +147,131 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const due = subs.filter((s) => isDue(s, now));
   const results: { email: string; status: string; detail?: string }[] = [];
 
+  // Live member roster (admin session) → authoritative email/display name and
+  // member_id lookup. Best-effort: if it fails we fall back to the
+  // subscription's own email; live scope resolution below will surface errors.
+  let roster: CompanyMember[] = [];
+  try {
+    roster = await listCompanyMembers();
+  } catch (err) {
+    console.warn("listCompanyMembers failed:", (err as Error)?.message);
+  }
+  const byId = new Map(roster.map((m) => [m.memberId, m]));
+  const byEmail = new Map(roster.map((m) => [m.email.toLowerCase(), m]));
+
   for (const sub of due) {
     try {
-      const recipient = await getRecipient({ memberId: sub.member_id, email: sub.email });
-      // Admin-assigned stores win; otherwise use what was captured at login.
-      const override = Array.isArray(sub.stores_override) ? sub.stores_override : null;
-      const stores = (override && override.length > 0
-        ? override
-        : recipient?.stores ?? []) as RecipientStore[];
-      if (stores.length === 0) {
+      const member =
+        (sub.member_id ? byId.get(String(sub.member_id)) : undefined) ??
+        byEmail.get(sub.email.toLowerCase());
+      const memberId = sub.member_id ?? member?.memberId ?? null;
+      const toEmail = member?.email || sub.email;
+      const displayName = member?.displayName ?? null;
+
+      // Store scope: explicit admin override wins; otherwise pull the member's
+      // LIVE Floorcare permissions via getMemberPermissions.
+      const override = Array.isArray(sub.stores_override) ? sub.stores_override : [];
+      let grants: MemberStoreGrant[];
+      let scope: "override" | "live";
+      if (override.length > 0) {
+        scope = "override";
+        grants = override.map((s) => ({
+          configId: String(FLOORCARE_CONFIG.configId),
+          configName: FLOORCARE_CONFIG.configurationName,
+          outerTierId: s.outerTierId,
+          storeName: s.name,
+        }));
+      } else if (!memberId) {
         results.push({
           email: sub.email,
           status: "skipped",
-          detail: "no stores — recipient hasn't logged in and no manual store assignment",
+          detail: "no member_id and no manual store override — can't resolve permissions",
+        });
+        continue;
+      } else {
+        scope = "live";
+        const all = await getMemberStoreGrants(memberId);
+        grants = all.filter((g) =>
+          isFloorcareConfig({ configId: g.configId, configName: g.configName })
+        );
+      }
+
+      if (grants.length === 0) {
+        results.push({
+          email: toEmail,
+          status: "skipped",
+          detail:
+            scope === "live"
+              ? "member has no Floorcare store permissions"
+              : "manual override contained no stores",
         });
         continue;
       }
-      const configName = recipient?.config_name ?? FLOORCARE_CONFIG.configurationName;
-      const configId = recipient?.config_id ?? String(FLOORCARE_CONFIG.configId);
+
+      let capped = false;
+      if (grants.length > MAX_STORES_PER_EMAIL) {
+        grants = grants.slice(0, MAX_STORES_PER_EMAIL);
+        capped = true;
+      }
+
       const range = isoRange(windowDays(sub.frequency));
 
-      const { records, tickets } = await fetchStoreData(
-        stores.map((s) => s.name),
-        configName,
-        range
-      );
+      // Group by config — outerTierIds are per-config, and runWidgets filters by
+      // config + store NAME, so we fetch each config the member is granted once.
+      const groups = new Map<
+        string,
+        { configName: string; configId: string; stores: MemberStoreGrant[] }
+      >();
+      for (const g of grants) {
+        const key = g.configName || g.configId;
+        const grp = groups.get(key) ?? {
+          configName: g.configName,
+          configId: g.configId,
+          stores: [],
+        };
+        grp.stores.push(g);
+        groups.set(key, grp);
+      }
 
-      const attachments = stores.map((store) => {
-        const report = buildStoreReport(store, configName, configId, range, records, tickets);
-        const safe = store.name.replace(/[^\w\s-]/g, "").trim();
-        return { filename: `${safe} - Floorcare Report.pdf`, content: renderStorePdf(report) };
-      });
+      const attachments: { filename: string; content: Buffer }[] = [];
+      for (const grp of groups.values()) {
+        const { records, tickets } = await fetchStoreData(
+          grp.stores.map((s) => s.storeName),
+          grp.configName,
+          range
+        );
+        for (const s of grp.stores) {
+          const report = buildStoreReport(
+            { outerTierId: s.outerTierId, name: s.storeName },
+            grp.configName,
+            grp.configId,
+            range,
+            records,
+            tickets
+          );
+          const safe = s.storeName.replace(/[^\w\s-]/g, "").trim();
+          attachments.push({
+            filename: `${safe} - Floorcare Report.pdf`,
+            content: renderStorePdf(report),
+          });
+        }
+      }
 
-      const storeList = stores.map((s) => s.name).join(", ");
+      const storeList = grants.map((s) => s.storeName).join(", ");
       await sendEmail({
-        to: sub.email,
+        to: toEmail,
         subject: `Wegmans Floorcare ${sub.frequency} report — ${range.end}`,
-        html: `<p>Hi${recipient?.display_name ? " " + recipient.display_name : ""},</p>
+        html: `<p>Hi${displayName ? " " + displayName : ""},</p>
 <p>Attached is your ${sub.frequency} Wegmans Floorcare compliance report for <strong>${storeList}</strong> (covering ${range.start} to ${range.end}).</p>
 <p style="color:#6e747c;font-size:12px">Wegmans Floorcare Compliance · powered by Smart Inspect</p>`,
         attachments,
       });
       await markSubscriptionSent(sub.id);
-      results.push({ email: sub.email, status: "sent", detail: `${attachments.length} store(s)` });
+      results.push({
+        email: toEmail,
+        status: "sent",
+        detail: `${attachments.length} store(s)${capped ? ` (capped at ${MAX_STORES_PER_EMAIL})` : ""} · scope=${scope}`,
+      });
     } catch (err) {
       results.push({ email: sub.email, status: "error", detail: (err as Error)?.message });
     }

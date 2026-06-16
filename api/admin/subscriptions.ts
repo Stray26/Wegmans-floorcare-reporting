@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { readSession, isAdminSession } from "../_lib/session.js";
-import { siPost, permittedStoresFrom } from "../_lib/smartInspect.js";
+import { siPost, permittedStoresFrom, listCompanyMembers } from "../_lib/smartInspect.js";
 import {
   listSubscriptions,
   upsertSubscription,
@@ -14,9 +14,14 @@ import {
  * /api/admin/subscriptions — manage scheduled-report recipients + cadence.
  * Admin-only (session email on the report-admin allowlist). All Supabase writes
  * use the service-role key server-side; the browser never touches Supabase.
- *   GET    -> { subscriptions, recipients }
+ *   GET    -> { subscriptions, members, recipients, availableStores }
  *   POST   -> upsert { id?, email, frequency, enabled?, member_id?, weekly_dow?, monthly_dom?, send_hour? }
  *   DELETE -> ?id=<uuid>
+ *
+ * `members` is the live Smart Inspect roster (admin session) — the picker keys
+ * subscriptions to a member_id, and the cron pulls that member's live store
+ * permissions at send time. `recipients` (login-captured) is retained for
+ * backward-compat display only.
  */
 const FREQS: ReportFrequency[] = ["daily", "weekly", "monthly"];
 
@@ -37,7 +42,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         listSubscriptions(),
         listRecipients(),
       ]);
-      // Stores the admin can assign — the company's SI-permitted outer tiers.
+      // Live SI member roster — the recipient picker. Best-effort: if the admin
+      // service account isn't configured/reachable, fall back to captured
+      // recipients so the page still works.
+      let members: Awaited<ReturnType<typeof listCompanyMembers>> = [];
+      try {
+        members = await listCompanyMembers();
+      } catch {
+        // admin session unavailable — picker falls back to captured recipients
+      }
+      // Stores the admin can assign as a manual override.
       let availableStores: RecipientStore[] = [];
       try {
         const perms = await siPost("/getPermissions", { permissionType: "Access" });
@@ -47,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch {
         // SI token unset/unreachable — picker simply shows no options
       }
-      res.status(200).json({ subscriptions, recipients, availableStores });
+      res.status(200).json({ subscriptions, members, recipients, availableStores });
       return;
     }
 

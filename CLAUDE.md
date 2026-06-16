@@ -67,6 +67,21 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
 - **Deferred**: real Excel export (Custom Detail Report still toast-mocks Excel/PDF), wiring the
   store PDF into the Store Detail modal, mobile-polish pass.
 
+### 2026-06-16 session (shipped, branch `feature/live-member-report-permissions`)
+
+- **Scheduled reports now pull permissions LIVE per member.** A 2026-06-16 HAR revealed SI's
+  `getMemberPermissions` (any member's store grants) + `listMembers` (the roster) — the per-member
+  lookup previously thought blocked. The cron logs in as an SI admin service account
+  (`SI_ADMIN_USERNAME`/`SI_ADMIN_PASSWORD`) and resolves each subscriber's *current* Floorcare
+  stores at send time; the `/settings/reports` picker is now the live member roster (keyed by
+  `member_id`). Login-capture (`report_recipients`) is demoted to legacy/fallback. See the Scheduled
+  report emails section, `docs/scheduled-reports.md`, and `docs/si-internal-api.md` (new endpoints +
+  config/outer-tier map). Multi-config aware (Pre/Post-Launch); excludes the general config 19399.
+- **`/api` is now type-checked** via `tsconfig.api.json` (`npm run typecheck:api`) — the app build's
+  `tsc -b` only covers `src`. Vercel still bundles `/api` with esbuild (ignores this tsconfig).
+- **⚠️ Still NOT verified end-to-end** — needs the env vars set + a real cron run to confirm a send,
+  AND confirmation that the admin-session endpoints behave in the deployed function.
+
 ## Stack
 
 React 18 + Vite + TypeScript + Tailwind + shadcn-style UI (hand-rolled on Radix) +
@@ -154,14 +169,20 @@ previous user's cache. `createTicket` additionally checks the user's `canTicket`
 ## Scheduled report emails (2026-06-15)
 
 Daily Vercel Cron (`api/cron/send-reports.ts`; `vercel.json` crons `0 11 * * *`) emails curated
-recipients their store Floorcare PDF via **Resend**. A cron has no user session and SI only
-returns a member's store grants to that member's own login, so each user's permitted stores are
-**captured at login** into Supabase `report_recipients` (`api/auth/login.ts` → `upsertRecipient`,
-best-effort). `report_subscriptions` (curated) holds who + cadence; stores resolve from
-`report_recipients` (by `member_id`, else `email`). The server PDF reuses the shared layout
-`src/utils/storePdfLayout.ts` — identical to the browser export. Supabase is **server-only**
-(service-role key; RLS on, no policies; the browser never touches it). Cadence is evaluated by the
-daily run (daily; weekly `weekly_dow`; monthly `monthly_dom`) with a `last_sent_at` same-day guard.
+recipients their store Floorcare PDF via **Resend**. **Store scope is pulled LIVE per member
+(2026-06-16)**: the cron logs in as an SI **admin service account**
+(`SI_ADMIN_USERNAME`/`SI_ADMIN_PASSWORD` → SIQ-0) and calls `listMembers` + `getMemberPermissions`
+(`api/_lib/smartInspect.ts` → `getAdminSessionToken`, `listCompanyMembers`, `getMemberStoreGrants`)
+to get each subscriber's current grants — no login-capture dependency, never stale. Only Floorcare
+configs are reported (`isFloorcareConfig` in `src/config/wegmans.ts`; excludes the ~100-store
+general `Wegmans` config 19399); grants are grouped by config (outerTierIds are per-config, SI
+filters by store **name**); an explicit `stores_override` wins if set; capped at 30 PDFs/email.
+`report_subscriptions` (curated, keyed by `member_id`) holds who + cadence. The server PDF reuses
+the shared layout `src/utils/storePdfLayout.ts` — identical to the browser export. Supabase is
+**server-only** (service-role key; RLS on, no policies). Cadence is evaluated by the daily run
+(daily; weekly `weekly_dow`; monthly `monthly_dom`) with a `last_sent_at` same-day guard.
+`report_recipients` (login-capture) is now **legacy** — the cron no longer reads stores from it
+(login still upserts it; the admin picker falls back to it if the admin service account is down).
 Full setup, env vars, and limitations: `docs/scheduled-reports.md`.
 
 > The `/api` function bundler (esbuild) reads the **root** `tsconfig.json`, so `baseUrl`+`paths`
@@ -173,21 +194,24 @@ Full setup, env vars, and limitations: `docs/scheduled-reports.md`.
 email on an allowlist: `REPORT_ADMIN_EMAILS` env ∪ a code default (`vmaione@mysmartinspect.com`),
 checked in `api/_lib/session.ts` (`isAdminSession`); `publicIdentity` / `/api/auth/me` expose
 `isAdmin`. CRUD goes through `api/admin/subscriptions.ts` (session + admin gated; service-role
-writes). Admins can **manually assign stores** to a subscription
-(`report_subscriptions.stores_override` jsonb) for recipients who haven't logged in — the cron
-prefers the override, else the captured stores, and no longer needs a `report_recipients` row.
-Picker options come from the company SIQ-1 `getPermissions`.
+writes). The recipient picker is the **live SI member roster** (`listMembers` via the admin
+session); subscriptions key on `member_id`. Admins can optionally **pin stores**
+(`report_subscriptions.stores_override` jsonb) to override the live scope; otherwise stores come
+from the member's live `getMemberPermissions`. Override store options come from the company SIQ-1
+`getPermissions`.
 
 **Needs work (NOT done):**
 - **Not verified end-to-end** — deployed, but no real email confirmed sent. Run the cron once
   (`curl -H "Authorization: Bearer $CRON_SECRET" <app>/api/cron/send-reports`) and confirm delivery.
-- A recipient gets mail only if they've logged in (captured stores) OR have a manual store
-  assignment; otherwise the cron reports `skipped`.
+- Requires `SI_ADMIN_USERNAME`/`SI_ADMIN_PASSWORD` (Account-role) set in env, and relies on SI's
+  **undocumented internal** `getMemberPermissions`/`listMembers` (admin session). Get SI's blessing.
+- A subscriber with no Floorcare store grants (or an unresolvable member) is `skipped` (reported).
 - `send_hour` is stored but NOT enforced — the single daily cron (`0 11 * * *`, 11:00 UTC) sends at one time.
 - Cron processes recipients sequentially — fine for a few; batch/fan-out before scaling (function timeout).
-- Manual store assignment is admin-asserted, NOT validated against the recipient's own SI permissions.
-- Couldn't auto-pull a not-logged-in member's SI stores (SI returns them only to that member's own
-  session); the "admin SI lookup" path (probe `fullPermissions` / admin getPermissions) was deferred.
+- A pinned `stores_override` is admin-asserted, NOT validated against the member's own SI permissions.
+- `getMemberPermissions` `rules.accessAllOuterTiers` isn't expanded; we use the explicit
+  `permissionOuterTiers` per config. Live SIQ-1 support for `getMemberPermissions` is unconfirmed —
+  if it works, the admin login can be dropped.
 - Emailed-PDF logo is bundled via `vercel.json` `includeFiles`; falls back to a text header if not
   found at runtime — confirm it renders on deploy.
 - Resend sends from the verified `mysmartinspect.com` domain; the admin allowlist matches the SI
@@ -203,7 +227,9 @@ Scheduled report emails (server-side too): `SUPABASE_URL`
 (`https://mjhuujbwkkfjmzfmzqol.supabase.co`), `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`,
 `REPORT_EMAIL_FROM` (verified Resend sender, e.g. `Wegmans Floorcare <reports@mysmartinspect.com>`),
 `CRON_SECRET` (cron auth — the cron refuses to run without it), `REPORT_ADMIN_EMAILS`
-(comma-separated extra report-admin emails; `vmaione@mysmartinspect.com` is a built-in default).
+(comma-separated extra report-admin emails; `vmaione@mysmartinspect.com` is a built-in default),
+`SI_ADMIN_USERNAME` + `SI_ADMIN_PASSWORD` (an SI Account-role service login the cron uses to pull
+members' live store permissions via `getMemberPermissions`/`listMembers`).
 See `docs/scheduled-reports.md`.
 Frontend: `VITE_ENABLE_MOCK_DATA` (`false` in prod), `VITE_APP_ENV`.
 All set in Vercel project env. `.env.local` is gitignored (Vercel CLI also writes a `VERCEL_OIDC_TOKEN` there).

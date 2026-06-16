@@ -46,6 +46,62 @@ returns the assigned member's grants, no `memberId` accepted for others.)
 `POST /api/fullPermissions` — same body → the company's FULL config/outer-tier tree
 (what the permission-editing admin UI uses). Useful for an admin store-picker.
 
+### getMemberPermissions / getPermissionLevels (confirmed 2026-06-16 HAR)
+
+The web app's permission-editor uses two more endpoints that DO return an
+arbitrary member's scope to an **admin (Account-role) session** — this is the
+piece that unblocks per-member scheduled reports without that member logging in:
+
+`POST /api/getMemberPermissions`  Body: `{ "memberId": <id>, "companyId": 1382 }`
+→ `{ success, permissions: { rules, levels, access, pdf } }` where
+  - `rules` — `{ accessAllConfigs, accessAllOuterTiers, accessAllNotes, linkAccessToPdf, pdfAll* }`
+  - `levels` — capability flags (`canInspect, canView, canGetReports, canTicket, …`)
+  - `access.permissionConfigs[]` — the member's granted stores:
+    `{ name (configName), configId, permissionOuterTiers: [{ name, outerTierId }] }`
+  - `pdf.permissionConfigs[]` — same shape, scoped to PDF access.
+  A member may be granted stores across **multiple** configs.
+
+`GET /api/getPermissionLevels?memberId=<id>&companyId=1382`
+→ `{ success, permissionLevels: { id, canInspect, canView, canGetReports, … } }`
+(just the capability flags, no store scope).
+
+**Auth:** these are the web app's internal, **session-authed** endpoints. In the
+HAR they ran under an Account-role SIQ-0 session (no `Authorization`/`Cookie`
+captured — the export stripped it); they are NOT confirmed under the company
+SIQ-1 token. The scheduled-report cron therefore logs in with a dedicated SI
+**admin service account** (`SI_ADMIN_USERNAME`/`SI_ADMIN_PASSWORD`) and reuses
+that SIQ-0 session — see `api/_lib/smartInspect.ts` (`getAdminSessionToken`,
+`listCompanyMembers`, `getMemberStoreGrants`).
+
+### Per-member reports (SI's own scheduler — not used by this portal)
+
+`POST /api/getMemberReports` `{ memberId, companyId }` → `reports[]`
+(`reportFrequencyId`, `reportDefinitionName`, `onlyMyUploads`, …) and
+`POST /api/listSchedulableReports` `{ companyId }` → the catalog of schedulable
+report definitions (`buildingsInspectedReport`, `deficiencyReport`, `dynamicQsp`,
+`photo`, `notesReport`, …). SI has a native per-member scheduled-report system;
+this portal emails its **own** Wegmans Floorcare PDF instead, but this is where
+to look if we ever want to hook into SI's scheduler.
+
+### Config / outer-tier map (companyId 1382, from the 2026-06-16 HAR)
+
+Outer-tier IDs are **per-config** — the same store has a different `outerTierId`
+in every config, so always join by store **name**:
+
+| config | configId | 115 Tysons | 73 Johnson City | 92 Military Rd |
+| --- | --- | --- | --- | --- |
+| Wegmans Floorcare Pilot (orig) | 20035 | 191864 | 191941 | 191958 |
+| Pre-Launch – ABS | 20637 | 198003 | — | — |
+| Pre-Launch – CSG | 20633 | — | 197992 | — |
+| Pre-Launch – Tec Services | 20635 | — | — | 197999 |
+| Post-Launch – ABS | 20639 | 198006 | 198007 | 198008 |
+| Post-Launch – CSG | 20634 | 197994 | 197995 | 197996 |
+| Post-Launch – Tec Services | 20636 | 198000 | 198001 | 198002 |
+
+Plus the big general `Wegmans` config (19399, ~100 stores) — **excluded** from
+the Floorcare report (`isFloorcareConfig` in `src/config/wegmans.ts`). 21 members
+in the roster; all currently have `canGetReports: true`.
+
 ## Member management (session auth)
 
 - `GET /api/listMembers?companyId=1382&status=all` → `members[]`:

@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Loader2, Store } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageShell";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -31,8 +30,16 @@ interface RecipientSummary {
   stores: StoreRef[];
   captured_at: string;
 }
+interface MemberRef {
+  memberId: string;
+  email: string;
+  displayName: string;
+  roleId: string | null;
+  canGetReports: boolean;
+}
 interface AdminData {
   subscriptions: SubscriptionRow[];
+  members: MemberRef[];
   recipients: RecipientSummary[];
   availableStores: StoreRef[];
 }
@@ -94,7 +101,7 @@ export function ReportSettings() {
       ) as Promise<AdminData>,
   });
 
-  const [email, setEmail] = React.useState("");
+  const [memberId, setMemberId] = React.useState("");
   const [frequency, setFrequency] = React.useState<Frequency>("weekly");
   const [addStores, setAddStores] = React.useState<Set<string>>(new Set());
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -127,7 +134,21 @@ export function ReportSettings() {
   const subs = data?.subscriptions ?? [];
   const recipients = data?.recipients ?? [];
   const stores = data?.availableStores ?? [];
-  const recByEmail = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
+  // Picker options: the live SI roster when available, else captured recipients
+  // (so the page still works if the admin service account isn't configured).
+  const members = data?.members ?? [];
+  const pickerOptions: MemberRef[] =
+    members.length > 0
+      ? members
+      : recipients.map((r) => ({
+          memberId: r.member_id,
+          email: r.email,
+          displayName: r.display_name ?? r.email,
+          roleId: null,
+          canGetReports: true,
+        }));
+  const memberById = new Map(pickerOptions.map((m) => [m.memberId, m]));
+  const subbedMemberIds = new Set(subs.map((s) => s.member_id).filter(Boolean) as string[]);
   const storesFromIds = (ids: Set<string>) => stores.filter((s) => ids.has(s.outerTierId));
   const toggle = (set: React.Dispatch<React.SetStateAction<Set<string>>>) => (id: string) =>
     set((prev) => {
@@ -137,27 +158,30 @@ export function ReportSettings() {
       return next;
     });
 
-  function effectiveStores(s: SubscriptionRow): StoreRef[] {
-    if (s.stores_override && s.stores_override.length > 0) return s.stores_override;
-    return recByEmail.get(s.email.toLowerCase())?.stores ?? [];
+  /** Stores the admin manually pinned (override). Empty = use live SI permissions. */
+  function overrideStores(s: SubscriptionRow): StoreRef[] {
+    return s.stores_override && s.stores_override.length > 0 ? s.stores_override : [];
   }
 
   function addSubscription() {
-    const e = email.trim();
-    if (!e) return;
-    const match = recByEmail.get(e.toLowerCase());
+    const m = memberById.get(memberId);
+    if (!m) return;
     save.mutate(
       {
-        email: e,
+        email: m.email,
         frequency,
-        member_id: match?.member_id ?? null,
+        member_id: m.memberId,
         ...(addStores.size > 0 ? { stores_override: storesFromIds(addStores) } : {}),
       },
       {
         onSuccess: () => {
-          setEmail("");
+          setMemberId("");
           setAddStores(new Set());
-          toast({ title: "Subscription saved", description: `${e} · ${frequency}`, variant: "success" });
+          toast({
+            title: "Subscription saved",
+            description: `${m.displayName} · ${frequency}`,
+            variant: "success",
+          });
         },
       }
     );
@@ -165,7 +189,7 @@ export function ReportSettings() {
 
   function startEdit(s: SubscriptionRow) {
     setEditingId(s.id);
-    setEditStores(new Set(effectiveStores(s).map((o) => o.outerTierId)));
+    setEditStores(new Set(overrideStores(s).map((o) => o.outerTierId)));
   }
   function saveEdit(s: SubscriptionRow) {
     save.mutate(
@@ -185,7 +209,7 @@ export function ReportSettings() {
     <div>
       <PageHeader
         title="Report Emails"
-        subtitle="Who receives the scheduled Floorcare PDF, and how often. Stores come from each person's login automatically — or assign them manually for recipients who haven't logged in yet."
+        subtitle="Who receives the scheduled Floorcare PDF, and how often. Each recipient's stores are pulled live from their Smart Inspect permissions at send time."
       />
 
       <Card className="mb-5">
@@ -194,21 +218,26 @@ export function ReportSettings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="min-w-[220px] flex-1">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Email</span>
-              <Input
-                list="recipient-emails"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="manager@wegmans.com"
-              />
-              <datalist id="recipient-emails">
-                {recipients.map((r) => (
-                  <option key={r.member_id} value={r.email}>
-                    {r.display_name ?? r.email}
-                  </option>
-                ))}
-              </datalist>
+            <label className="min-w-[260px] flex-1">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                Smart Inspect member
+              </span>
+              <select
+                className={cn(selectCls, "w-full")}
+                value={memberId}
+                onChange={(e) => setMemberId(e.target.value)}
+              >
+                <option value="">Select a member…</option>
+                {pickerOptions.map((m) => {
+                  const added = subbedMemberIds.has(m.memberId);
+                  return (
+                    <option key={m.memberId} value={m.memberId} disabled={added}>
+                      {m.displayName} — {m.email}
+                      {added ? " (added)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
             </label>
             <label>
               <span className="mb-1 block text-xs font-medium text-muted-foreground">Frequency</span>
@@ -224,14 +253,14 @@ export function ReportSettings() {
                 ))}
               </select>
             </label>
-            <Button onClick={addSubscription} disabled={save.isPending || !email.trim()}>
+            <Button onClick={addSubscription} disabled={save.isPending || !memberId}>
               {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Add
             </Button>
           </div>
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-              Stores (optional — only needed if the recipient hasn’t logged in; otherwise their own stores are used)
+              Override stores (optional — leave empty to use the member’s live Smart Inspect permissions)
             </p>
             <StoreChecks stores={stores} selected={addStores} onToggle={toggle(setAddStores)} />
           </div>
@@ -256,8 +285,8 @@ export function ReportSettings() {
           ) : (
             <div className="space-y-2">
               {subs.map((s) => {
-                const eff = effectiveStores(s);
-                const manual = !!(s.stores_override && s.stores_override.length > 0);
+                const ov = overrideStores(s);
+                const manual = ov.length > 0;
                 const editing = editingId === s.id;
                 return (
                   <div key={s.id} className="rounded-md border border-border px-3 py-2">
@@ -306,9 +335,9 @@ export function ReportSettings() {
                         className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                       >
                         <Store className="h-3.5 w-3.5" />
-                        {eff.length > 0
-                          ? `${eff.length} store${eff.length > 1 ? "s" : ""}${manual ? " · manual" : ""}`
-                          : "no stores"}
+                        {manual
+                          ? `${ov.length} store${ov.length > 1 ? "s" : ""} · manual`
+                          : "Live from SI permissions"}
                       </button>
                       <Button
                         variant="ghost"
@@ -323,8 +352,8 @@ export function ReportSettings() {
                     {editing && (
                       <div className="mt-3 space-y-2 border-t border-border pt-3">
                         <p className="text-xs text-muted-foreground">
-                          Assign stores (overrides login-captured stores). Leave all unchecked to
-                          fall back to the recipient’s own stores.
+                          Pin specific stores (overrides the member’s live permissions). Leave all
+                          unchecked to use their live Smart Inspect permissions.
                         </p>
                         <StoreChecks
                           stores={stores}
