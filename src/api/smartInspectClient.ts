@@ -12,6 +12,7 @@ import {
   getMockRunWidgets,
   getMockTickets,
   getMockListTags,
+  getMockNotes,
   mockPhotoUrl,
   type DemoRole,
 } from "./mockData";
@@ -31,6 +32,7 @@ import {
   type SIRecord,
   type SIRawRecord,
   type SITicket,
+  type SIInspectionNote,
   type SIRunWidgetsResponse,
   type SIPermissionsResponse,
   type SIListTagsResponse,
@@ -193,6 +195,30 @@ function extractImageRecords(widgets: SIWidgets): SIRawRecord[] {
 }
 
 /**
+ * Pull the noteRecords out of an inspection.imageRecords response (free-text
+ * inspection notes, optionally with a photo). Falls back to a bare
+ * inspection.notes widget when present.
+ */
+function extractNoteRecords(widgets: SIWidgets): SIInspectionNote[] {
+  const fromVal = (v: unknown): SIInspectionNote[] | null =>
+    v &&
+    typeof v === "object" &&
+    Array.isArray((v as { noteRecords?: unknown }).noteRecords)
+      ? (v as { noteRecords: SIInspectionNote[] }).noteRecords
+      : null;
+  if (Array.isArray(widgets["inspection.notes"])) {
+    return widgets["inspection.notes"] as SIInspectionNote[];
+  }
+  return (
+    fromVal(widgets["inspection.imageRecords"]) ??
+    Object.values(widgets)
+      .map(fromVal)
+      .find((r): r is SIInspectionNote[] => !!r) ??
+    []
+  );
+}
+
+/**
  * Smart Inspect tickets carry no photo link, so associate each ticket with the
  * inspection photos sharing its store + check area + deficiency (best-effort).
  * Mutates ticket.photoUrls in place; leaves any already set (e.g. mock) alone.
@@ -250,7 +276,12 @@ function groupStoresByConfig(stores: StoreMeta[]): StoreMeta[][] {
 async function fetchRecordsAndTickets(
   stores: StoreMeta[],
   dateRange: DateRange
-): Promise<{ records: SIRecord[]; tickets: SITicket[]; images: SIRawRecord[] }> {
+): Promise<{
+  records: SIRecord[];
+  tickets: SITicket[];
+  images: SIRawRecord[];
+  notes: SIInspectionNote[];
+}> {
   const groups = groupStoresByConfig(stores);
   if (groups.length <= 1) return fetchConfigRecordsAndTickets(stores, dateRange);
   const results = await Promise.all(
@@ -260,6 +291,7 @@ async function fetchRecordsAndTickets(
     records: results.flatMap((r) => r.records),
     tickets: results.flatMap((r) => r.tickets),
     images: results.flatMap((r) => r.images),
+    notes: results.flatMap((r) => r.notes),
   };
 }
 
@@ -267,7 +299,12 @@ async function fetchRecordsAndTickets(
 async function fetchConfigRecordsAndTickets(
   stores: StoreMeta[],
   dateRange: DateRange
-): Promise<{ records: SIRecord[]; tickets: SITicket[]; images: SIRawRecord[] }> {
+): Promise<{
+  records: SIRecord[];
+  tickets: SITicket[];
+  images: SIRawRecord[];
+  notes: SIInspectionNote[];
+}> {
   const outerTierIds = stores.map((s) => s.buildingId);
   const config = configOf(stores);
 
@@ -282,8 +319,9 @@ async function fetchConfigRecordsAndTickets(
       resp.widgets["inspection.allRecords"]
     ).map(transformApiRecord);
     const tickets = widgetArray<SITicket>(resp.widgets["ticket.getTickets"]);
-    // Mock photos are synthesized by mockPhotoUrl; no image records needed.
-    return { records, tickets, images: [] };
+    // Mock photos are synthesized by mockPhotoUrl; notes come from getMockNotes.
+    const notes = getMockNotes(outerTierIds, dateRange.start, dateRange.end, config.configName);
+    return { records, tickets, images: [], notes };
   }
 
   // Live: outerTiers (store names) are injected/validated server-side; we send
@@ -317,9 +355,10 @@ async function fetchConfigRecordsAndTickets(
     inspResp.widgets["inspection.allRecords"]
   ).map(transformApiRecord);
   const images = extractImageRecords(inspResp.widgets);
+  const notes = extractNoteRecords(inspResp.widgets);
   // SI tickets have no photo link; associate inspection photos best-effort.
   attachTicketPhotos(tickets, images);
-  return { records, tickets, images };
+  return { records, tickets, images, notes };
 }
 
 function groupByBuilding(records: SIRecord[]): Map<string, SIRecord[]> {
@@ -357,7 +396,7 @@ export async function getPortfolioReport(
   dateRange: DateRange,
   thresholds: ScoreThreshold[]
 ) {
-  const { records, tickets, images } = await fetchRecordsAndTickets(
+  const { records, tickets, images, notes } = await fetchRecordsAndTickets(
     stores,
     dateRange
   );
@@ -376,7 +415,8 @@ export async function getPortfolioReport(
       meta.configId ?? config.configId,
       meta.configName ?? config.configName,
       thresholds,
-      resolvePhoto
+      resolvePhoto,
+      notes
     )
   );
 

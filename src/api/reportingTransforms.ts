@@ -7,7 +7,7 @@
  * Input is SIRecord[] (output of transformApiRecord over inspection.allRecords)
  * grouped by building (= outer tier = store).
  */
-import type { SIRecord, SITicket } from "../types/smartInspect.js";
+import type { SIRecord, SITicket, SIInspectionNote } from "../types/smartInspect.js";
 import type {
   StoreReport,
   CheckAreaReport,
@@ -16,6 +16,7 @@ import type {
   TicketReport,
   TicketStatus,
   PhotoReport,
+  NoteReport,
   TrendPoint,
   InspectionHistoryItem,
   ScoreThreshold,
@@ -114,6 +115,36 @@ function aggregateDeficiencies(
   return list.sort((a, b) => b.count - a.count);
 }
 
+/**
+ * Build a store's inspection notes from raw note records (the `noteRecords`
+ * side of inspection.imageRecords). Matched to the store by outer-tier name,
+ * keeping only notes that carry text and/or a photo. The note's image URL lives
+ * on `url` (like image records) or the legacy `photo` field.
+ */
+function buildNotes(
+  noteRecords: SIInspectionNote[],
+  building: string,
+  storeName: string
+): NoteReport[] {
+  return noteRecords
+    .filter((n) => n.outerTier === building || n.outerTier === storeName)
+    .map((n) => {
+      const friendly = n.noteCategory ? friendlyCheckmark(n.noteCategory) : "";
+      const photoUrl = n.url ?? n.photo ?? undefined;
+      return {
+        id: String(n.id),
+        storeName: building,
+        noteText: (n.noteText ?? "").trim(),
+        noteCategory: n.noteCategory,
+        checkAreaName: friendly ? englishLabel(friendly) : undefined,
+        inspector: n.inspector,
+        photoUrl: typeof photoUrl === "string" && photoUrl ? photoUrl : undefined,
+        capturedAt: n.recordDate ?? n.uploadDate ?? "",
+      };
+    })
+    .filter((n) => n.noteText.length > 0 || !!n.photoUrl);
+}
+
 /** Store identity, so not-uploaded stores (zero records) still render. */
 export interface StoreMeta {
   buildingId: string;
@@ -130,6 +161,8 @@ export interface StoreMeta {
  * @param resolvePhotoUrl optional — returns a URL for a photo-bearing record,
  *   or null to skip. Live photos come from inspection.imageRecords; in mock
  *   mode the client supplies a resolver. Defaults to skipping.
+ * @param noteRecords optional — raw inspection notes (the noteRecords side of
+ *   inspection.imageRecords); filtered to this store and normalized to NoteReport.
  */
 export function transformStoreReport(
   meta: StoreMeta,
@@ -139,7 +172,8 @@ export function transformStoreReport(
   configId: string,
   configurationName: string,
   thresholds: ScoreThreshold[] = DEFAULT_THRESHOLDS,
-  resolvePhotoUrl?: (r: SIRecord) => string | null
+  resolvePhotoUrl?: (r: SIRecord) => string | null,
+  noteRecords: SIInspectionNote[] = []
 ): StoreReport {
   const buildingId = meta.buildingId;
   const uploaded = records.length > 0;
@@ -183,6 +217,9 @@ export function transformStoreReport(
       });
     }
   }
+
+  // notes (free-text, optionally with a photo)
+  const notes = buildNotes(noteRecords, building, meta.storeName);
 
   // group by inspection for trend + history
   const byInspection = new Map<string, SIRecord[]>();
@@ -257,6 +294,7 @@ export function transformStoreReport(
     checkAreas,
     deficiencies,
     photos,
+    notes,
     tickets: storeTickets,
     trend,
     history,

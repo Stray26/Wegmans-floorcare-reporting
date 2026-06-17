@@ -57,6 +57,22 @@ export interface PhotoReport {
   capturedAt: string;
 }
 
+/** A free-text note captured during an inspection (optionally with a photo). */
+export interface NoteReport {
+  id: string;
+  storeName: string;
+  /** The note body the inspector typed. */
+  noteText: string;
+  /** SI note category (often the area/section the note was filed under). */
+  noteCategory?: string;
+  /** Friendly check-area name when the note maps to one of the 10 areas. */
+  checkAreaName?: string;
+  inspector?: string;
+  /** Direct CDN URL of the note's photo, when one was attached. */
+  photoUrl?: string;
+  capturedAt: string;
+}
+
 export type TicketStatus = "open" | "in-progress" | "closed" | "overdue";
 
 export interface TicketReport {
@@ -117,6 +133,7 @@ export interface StoreReport {
   checkAreas: CheckAreaReport[];
   deficiencies: DeficiencyReport[];
   photos: PhotoReport[];
+  notes: NoteReport[];
   tickets: TicketReport[];
   trend: TrendPoint[];
   history: InspectionHistoryItem[];

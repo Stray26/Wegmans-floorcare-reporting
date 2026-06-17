@@ -11,9 +11,10 @@ export function usePortfolioReport(stores: StoreMeta[]) {
   return useQuery({
     queryKey: [
       "portfolio",
-      // config in the key: the same store under a different config (program)
-      // is different data — switching configs must refetch, not hit cache.
-      stores[0]?.configName ?? null,
+      // configs in the key: the same store under a different config (program)
+      // is different data — switching/adding configs must refetch, not hit
+      // cache. Capture EVERY config in scope (multi-select), not just the first.
+      [...new Set(stores.map((s) => s.configName ?? ""))].sort().join("|"),
       stores.map((s) => s.buildingId),
       dateRange,
       thresholds,

@@ -19,6 +19,7 @@ import type {
   SIListTagsResponse,
   SIWidgets,
   SIInspectionDetails,
+  SIInspectionNote,
 } from "@/types/smartInspect";
 
 /* ----------------------------- seeded RNG ------------------------------ */
@@ -557,6 +558,63 @@ export function mockPhotoUrl(recordId: string): string {
   for (let i = 0; i < recordId.length; i++) h = (h * 31 + recordId.charCodeAt(i)) | 0;
   const idx = Math.abs(h) % PHOTO_SEED.length;
   return `${PHOTO_SEED[idx]}?auto=format&fit=crop&w=600&q=70`;
+}
+
+/* --------------------------------- notes ------------------------------- */
+
+const NOTE_TEXTS = [
+  "Heavy scuff marks near the vestibule; recommend re-burnishing this week.",
+  "Grout discoloration in the cafe seating area — schedule a deep scrub.",
+  "Standing water by the produce cooler creating a slip risk.",
+  "Baseboards need detail cleaning along the primary sales aisle.",
+  "Auto-scrubber left residue streaks; pad change and re-run needed.",
+  "Entry mats saturated after rain; swap for dry mats.",
+];
+
+/**
+ * Mock inspection notes (the noteRecords side of inspection.imageRecords).
+ * Deterministic per store; most carry a photo. Mirrors the live SIInspectionNote
+ * shape so the notes section renders in demo exactly as it will with real data.
+ */
+export function getMockNotes(
+  outerTierIds: string[],
+  startDate: string,
+  endDate: string,
+  configName?: string
+): SIInspectionNote[] {
+  const config = mockConfigByName(configName);
+  const startDay = startDate.slice(0, 10);
+  const endDay = endDate.slice(0, 10);
+  const allowed = STORE_SEEDS.filter((s) =>
+    outerTierIds.includes(String(s.outerTierId))
+  );
+  const notes: SIInspectionNote[] = [];
+  allowed.forEach((seed) => {
+    const rng = mulberry32(seed.outerTierId * 53 + 7 + (config.configId % 53));
+    const isPilot = PILOT_IDS.has(seed.outerTierId);
+    const dayOffset = isPilot ? 0 : 1 + Math.floor(rng() * 3);
+    const day = daysAgoIso(dayOffset).slice(0, 10);
+    if (day < startDay || day > endDay) return; // outside the window
+    const count = 1 + Math.floor(rng() * 3); // 1-3 notes per store
+    for (let i = 0; i < count; i++) {
+      const ca = CHECK_AREAS[Math.floor(rng() * CHECK_AREAS.length)];
+      const id = seed.outerTierId * 1000 + 900 + i;
+      notes.push({
+        id,
+        inspectionId: seed.outerTierId * 1000,
+        noteCategory: ca.label,
+        noteText: NOTE_TEXTS[Math.floor(rng() * NOTE_TEXTS.length)],
+        inspector: INSPECTORS[Math.floor(rng() * INSPECTORS.length)],
+        recordDate: daysAgoIso(dayOffset),
+        uploadDate: daysAgoIso(dayOffset, 8),
+        config: config.configurationName,
+        outerTier: seed.outerTier,
+        outerTierId: seed.outerTierId,
+        url: rng() > 0.4 ? mockPhotoUrl(`note-${id}`) : undefined,
+      });
+    }
+  });
+  return notes;
 }
 
 export { seedById };

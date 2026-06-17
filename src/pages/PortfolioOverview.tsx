@@ -32,7 +32,7 @@ export function PortfolioOverview() {
     stores: permittedStores,
     accessMode,
     configLabel,
-    isAllConfigs,
+    isMultiConfig,
   } = useSmartInspectPermissions();
   const program = configLabel || "Wegmans Floorcare Compliance";
   const {
@@ -203,7 +203,7 @@ export function PortfolioOverview() {
               stores={stores}
               search={search}
               statusFilter={statusFilter}
-              showConfig={isAllConfigs}
+              showConfig={isMultiConfig}
               onRowClick={setSelected}
             />
           </CardContent>

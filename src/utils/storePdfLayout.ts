@@ -1,6 +1,6 @@
 import type { jsPDF } from "jspdf";
 import type { UserOptions } from "jspdf-autotable";
-import type { StoreReport, ScoreStatus } from "@/types/reporting";
+import type { StoreReport, ScoreStatus, PhotoReport, NoteReport } from "@/types/reporting";
 
 /**
  * Shared, environment-agnostic renderer for the store Floorcare PDF. The jsPDF
@@ -8,12 +8,48 @@ import type { StoreReport, ScoreStatus } from "@/types/reporting";
  * SAME layout powers both the browser export (src/utils/storePdf.ts, downloads)
  * and the server/email render (api/_lib/reportPdf.ts, returns bytes). Keeping
  * one layout guarantees the emailed report matches the on-screen export.
+ *
+ * Photos are embedded via an injected `resolveImage(url)` lookup (the bytes are
+ * pre-fetched by the environment — Node fetch on the server, an image proxy in
+ * the browser — so this module stays free of any fetch/CORS concerns).
  */
 
 export type AutoTableFn = (doc: jsPDF, options: UserOptions) => void;
 export interface PdfLogo {
   dataUrl: string;
   ratio: number;
+}
+
+/** A photo already decoded to base64, ready for jsPDF.addImage. */
+export interface EmbeddedImage {
+  /** data:image/...;base64,... */
+  dataUrl: string;
+  format: "JPEG" | "PNG";
+  /** intrinsic px (0 when unknown → caller uses a default aspect). */
+  width: number;
+  height: number;
+}
+
+/** Returns the embedded bytes for a photo URL, or null to show a placeholder. */
+export type ResolveImage = (url: string) => EmbeddedImage | null;
+
+/** How many photos/notes to render so the PDF stays a sensible size. */
+export const MAX_DEFICIENCY_PHOTOS = 6;
+export const MAX_NOTES = 6;
+
+/**
+ * The exact set of photo URLs the store layout will try to embed (deficiency
+ * cards + notes), deduped. The render wrappers pre-fetch these into base64 so
+ * the (sync) layout can stay environment-agnostic.
+ */
+export function storeReportImageUrls(store: StoreReport): string[] {
+  const urls = new Set<string>();
+  store.photos
+    .filter((p) => p.deficiencyName && p.deficiencyName.toLowerCase() !== "acceptable")
+    .slice(0, MAX_DEFICIENCY_PHOTOS)
+    .forEach((p) => p.url && urls.add(p.url));
+  store.notes.slice(0, MAX_NOTES).forEach((n) => n.photoUrl && urls.add(n.photoUrl));
+  return [...urls];
 }
 
 const BRAND: [number, number, number] = [0, 105, 56]; // Wegmans green
@@ -55,12 +91,67 @@ function fmtDateTime(iso: string | null): string {
   });
 }
 
+const RED: [number, number, number] = [220, 38, 38];
+
+/** Top deficiency attribute name(s) reported in a check area (for the red column). */
+function deficiencyNamesForArea(area: StoreReport["checkAreas"][number]): string {
+  const names = area.deficiencyBreakdown
+    .filter((d) => d.count > 0)
+    .slice(0, 3)
+    .map((d) => d.deficiencyName);
+  return names.length > 0 ? names.join(", ") : "";
+}
+
+/**
+ * Draw an image fitted (contain) inside a box, centered, preserving aspect.
+ * Falls back to a light "photo unavailable" placeholder when bytes are missing
+ * or unreadable — a bad image never breaks the rest of the PDF.
+ */
+function drawFittedImage(
+  doc: jsPDF,
+  img: EmbeddedImage | null,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number
+): void {
+  doc.setFillColor(244, 246, 248);
+  doc.setDrawColor(225, 228, 232);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(x, y, boxW, boxH, 1.5, 1.5, "FD");
+  const placeholder = () => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(150, 156, 164);
+    doc.text("Photo unavailable", x + boxW / 2, y + boxH / 2, {
+      align: "center",
+      baseline: "middle",
+    });
+  };
+  if (!img) return placeholder();
+  const ratio = img.width > 0 && img.height > 0 ? img.width / img.height : 4 / 3;
+  let w = boxW - 1;
+  let h = w / ratio;
+  if (h > boxH - 1) {
+    h = boxH - 1;
+    w = h * ratio;
+  }
+  const ix = x + (boxW - w) / 2;
+  const iy = y + (boxH - h) / 2;
+  try {
+    doc.addImage(img.dataUrl, img.format, ix, iy, w, h);
+  } catch {
+    placeholder();
+  }
+}
+
 /** Render the full store report into `doc`. Does not create or save the doc. */
 export function renderStoreReportDoc(
   doc: jsPDF,
   autoTable: AutoTableFn,
   store: StoreReport,
-  logo: PdfLogo | null
+  logo: PdfLogo | null,
+  resolveImage?: ResolveImage
 ): void {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -199,12 +290,13 @@ export function renderStoreReportDoc(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [["Check Area", "Total", "Acceptable", "Deficiencies", "QSP", "Status"]],
+      head: [["Check Area", "Total", "Acceptable", "Deficiencies", "Deficiency", "QSP", "Status"]],
       body: areas.map((a) => [
         a.checkAreaName,
         String(a.totalCount),
         String(a.acceptableCount),
         String(a.deficiencyCount),
+        deficiencyNamesForArea(a) || "—",
         fmtScore(a.qspScore),
         STATUS_LABEL[a.status],
       ]),
@@ -215,10 +307,18 @@ export function renderStoreReportDoc(
         1: { halign: "right" },
         2: { halign: "right" },
         3: { halign: "right" },
-        4: { halign: "right" },
+        5: { halign: "right" },
       },
       didParseCell: (d) => {
-        if (d.column.index === 5) colorStatusCell(d as never);
+        if (d.column.index === 6) colorStatusCell(d as never);
+        // The actual reported deficiency shown in red (Vince's request).
+        if (d.column.index === 4 && d.section === "body") {
+          const txt = (d.cell.text?.[0] ?? "") as string;
+          if (txt && txt !== "—") {
+            d.cell.styles.textColor = RED;
+            d.cell.styles.fontStyle = "bold";
+          }
+        }
       },
     });
     y = finalY() + 8;
@@ -239,6 +339,86 @@ export function renderStoreReportDoc(
       columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
     });
     y = finalY() + 8;
+  }
+
+  // Deficiencies (photo cards: area + reported deficiency + photo)
+  const deficiencyPhotos = store.photos
+    .filter((p) => p.deficiencyName && p.deficiencyName.toLowerCase() !== "acceptable")
+    .slice(0, MAX_DEFICIENCY_PHOTOS);
+  if (deficiencyPhotos.length > 0) {
+    section("Deficiencies");
+    y += 4;
+    const cols = 3;
+    const gap = 5;
+    const cardW = (contentW - gap * (cols - 1)) / cols;
+    const imgH = cardW * 0.62;
+    const cardH = imgH + 13;
+    deficiencyPhotos.forEach((p: PhotoReport, i) => {
+      const col = i % cols;
+      if (col === 0 && y + cardH > pageH - 16) {
+        doc.addPage();
+        y = margin;
+      }
+      const x = margin + col * (cardW + gap);
+      drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
+      let ty = y + imgH + 4;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(...INK);
+      doc.text(doc.splitTextToSize(p.checkAreaName ?? "—", cardW)[0] ?? "", x, ty);
+      ty += 4.5;
+      doc.setTextColor(...RED);
+      doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, ty);
+      if (col === cols - 1 || i === deficiencyPhotos.length - 1) y += cardH + 6;
+    });
+  }
+
+  // Inspector Notes (photo as the focal area + store name + note text)
+  const notes = store.notes.slice(0, MAX_NOTES);
+  if (notes.length > 0) {
+    section("Inspector Notes");
+    y += 4;
+    const imgW = Math.min(95, contentW * 0.5);
+    const imgH = imgW * 0.62;
+    notes.forEach((n: NoteReport) => {
+      const img = n.photoUrl && resolveImage ? resolveImage(n.photoUrl) : null;
+      const hasPhoto = !!n.photoUrl;
+      const textX = hasPhoto ? margin + imgW + 6 : margin;
+      const textW = hasPhoto ? contentW - imgW - 6 : contentW;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      const bodyLines = doc.splitTextToSize(n.noteText || "—", textW) as string[];
+      const textBlockH = 6 + bodyLines.length * 4 + 5;
+      const rowH = Math.max(hasPhoto ? imgH : 0, textBlockH);
+      if (y + rowH > pageH - 16) {
+        doc.addPage();
+        y = margin;
+      }
+      if (hasPhoto) drawFittedImage(doc, img, margin, y, imgW, imgH);
+      let ty = y + 4;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...INK);
+      doc.text(n.storeName, textX, ty);
+      ty += 5.5;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...INK);
+      doc.text(bodyLines, textX, ty);
+      ty += bodyLines.length * 4 + 1;
+      const metaBits = [n.checkAreaName, n.inspector, fmtDate(n.capturedAt)].filter(
+        (b): b is string => !!b
+      );
+      if (metaBits.length > 0) {
+        doc.setFontSize(7.5);
+        doc.setTextColor(...MUTED);
+        doc.text(metaBits.join("  ·  "), textX, ty);
+      }
+      y += rowH + 7;
+      doc.setDrawColor(232, 235, 238);
+      doc.setLineWidth(0.2);
+      doc.line(margin, y - 3.5, pageW - margin, y - 3.5);
+    });
   }
 
   // Recent Inspections

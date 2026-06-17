@@ -25,7 +25,9 @@ import type {
   SIRawRecord,
   SITicket,
   SIRecord,
+  SIInspectionNote,
   SIRunWidgetsResponse,
+  SIWidgets,
 } from "../../src/types/smartInspect.js";
 import type { StoreReport } from "../../src/types/reporting.js";
 
@@ -49,6 +51,39 @@ function widgetArray<T>(value: unknown): T[] {
   return [];
 }
 
+/** inspectionRecords (photos) out of an inspection.imageRecords widget. */
+function extractImageRecords(widgets: SIWidgets): SIRawRecord[] {
+  const fromVal = (v: unknown): SIRawRecord[] | null =>
+    v &&
+    typeof v === "object" &&
+    Array.isArray((v as { inspectionRecords?: unknown }).inspectionRecords)
+      ? (v as { inspectionRecords: SIRawRecord[] }).inspectionRecords
+      : null;
+  return (
+    fromVal(widgets["inspection.imageRecords"]) ??
+    Object.values(widgets).map(fromVal).find((r): r is SIRawRecord[] => !!r) ??
+    []
+  );
+}
+
+/** noteRecords (free-text notes) out of an inspection.imageRecords widget. */
+function extractNoteRecords(widgets: SIWidgets): SIInspectionNote[] {
+  const fromVal = (v: unknown): SIInspectionNote[] | null =>
+    v &&
+    typeof v === "object" &&
+    Array.isArray((v as { noteRecords?: unknown }).noteRecords)
+      ? (v as { noteRecords: SIInspectionNote[] }).noteRecords
+      : null;
+  if (Array.isArray(widgets["inspection.notes"])) {
+    return widgets["inspection.notes"] as SIInspectionNote[];
+  }
+  return (
+    fromVal(widgets["inspection.imageRecords"]) ??
+    Object.values(widgets).map(fromVal).find((r): r is SIInspectionNote[] => !!r) ??
+    []
+  );
+}
+
 export function isoRange(days: number): { start: string; end: string } {
   const end = new Date();
   const start = new Date(end);
@@ -64,7 +99,12 @@ async function fetchStoreData(
   storeNames: string[],
   configName: string,
   range: { start: string; end: string }
-): Promise<{ records: SIRecord[]; tickets: SITicket[] }> {
+): Promise<{
+  records: SIRecord[];
+  tickets: SITicket[];
+  images: SIRawRecord[];
+  notes: SIInspectionNote[];
+}> {
   const inspectionRange = {
     startDate: `${range.start}T00:00:00Z`,
     endDate: `${range.end}T23:59:59Z`,
@@ -77,7 +117,11 @@ async function fetchStoreData(
   };
   const inspResp = await siPost<SIRunWidgetsResponse>("/runWidgets", {
     filters: { ...baseFilters, inspectionRange },
-    widgets: { "inspection.details": {}, "inspection.allRecords": {} },
+    widgets: {
+      "inspection.details": {},
+      "inspection.allRecords": {},
+      "inspection.imageRecords": {},
+    },
   });
   let tickets: SITicket[] = [];
   try {
@@ -92,7 +136,9 @@ async function fetchStoreData(
   const records = widgetArray<SIRawRecord>(inspResp.widgets["inspection.allRecords"]).map(
     transformApiRecord
   );
-  return { records, tickets };
+  const images = extractImageRecords(inspResp.widgets);
+  const notes = extractNoteRecords(inspResp.widgets);
+  return { records, tickets, images, notes };
 }
 
 function buildStoreReport(
@@ -101,7 +147,9 @@ function buildStoreReport(
   configId: string,
   range: { start: string; end: string },
   records: SIRecord[],
-  tickets: SITicket[]
+  tickets: SITicket[],
+  images: SIRawRecord[],
+  notes: SIInspectionNote[]
 ): StoreReport {
   const meta: StoreMeta = {
     buildingId: store.outerTierId,
@@ -110,7 +158,24 @@ function buildStoreReport(
     configName,
   };
   const own = records.filter((r) => r.buildingId === store.outerTierId);
-  return transformStoreReport(meta, own, tickets, range, configId, configName, DEFAULT_THRESHOLDS);
+  // Map each photo-bearing record id to its CDN URL (live photos come from
+  // inspection.imageRecords, exactly like the browser client does).
+  const urlById = new Map<string, string>();
+  for (const im of images) {
+    if (im.url) urlById.set(String(im.id), im.url);
+  }
+  const resolvePhoto = (r: SIRecord): string | null => urlById.get(r.id) ?? null;
+  return transformStoreReport(
+    meta,
+    own,
+    tickets,
+    range,
+    configId,
+    configName,
+    DEFAULT_THRESHOLDS,
+    resolvePhoto,
+    notes
+  );
 }
 
 /**
@@ -193,7 +258,7 @@ export async function sendReportForSubscription(
   // Build a StoreReport for every store (used by both report types).
   const built: { report: StoreReport; storeName: string }[] = [];
   for (const grp of groups.values()) {
-    const { records, tickets } = await fetchStoreData(
+    const { records, tickets, images, notes } = await fetchStoreData(
       grp.stores.map((s) => s.storeName),
       grp.configName,
       range
@@ -206,7 +271,9 @@ export async function sendReportForSubscription(
           grp.configId,
           range,
           records,
-          tickets
+          tickets,
+          images,
+          notes
         ),
         storeName: s.storeName,
       });
@@ -228,10 +295,15 @@ export async function sendReportForSubscription(
       },
     ];
   } else {
-    attachments = built.map(({ report, storeName }) => {
-      const safe = storeName.replace(/[^\w\s-]/g, "").trim();
-      return { filename: `${safe} - Floorcare Report.pdf`, content: renderStorePdf(report) };
-    });
+    attachments = await Promise.all(
+      built.map(async ({ report, storeName }) => {
+        const safe = storeName.replace(/[^\w\s-]/g, "").trim();
+        return {
+          filename: `${safe} - Floorcare Report.pdf`,
+          content: await renderStorePdf(report),
+        };
+      })
+    );
   }
 
   const storeList = grants.map((s) => s.storeName).join(", ");

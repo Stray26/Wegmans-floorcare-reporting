@@ -133,8 +133,11 @@ export interface SIInspectionNote {
   uploadDate: string;
   config: string;
   outerTier: string;
+  outerTierId?: number | string;
   midTier?: string;
   selectTier?: string;
+  /** Note photo on the SI file CDN. Live rows use `url`; older shapes use `photo`. */
+  url?: string;
   photo?: string;
 }
 

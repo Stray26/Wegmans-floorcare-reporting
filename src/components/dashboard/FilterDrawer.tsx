@@ -2,15 +2,16 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSession, ALL_CONFIGS } from "@/context/SessionContext";
+import { useSession } from "@/context/SessionContext";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
 import type { StoreReport } from "@/types/reporting";
 
 /**
  * Corporate filter hierarchy mirrors Smart Inspect: Config (inspection
- * program) -> Store. Config is a SCOPE — applying it rescopes the whole
- * dashboard via the session's configFilter (data is refetched for that
- * config). Store and Inspector narrow the visible rows client-side.
+ * program) -> Store. Config is a SCOPE — one or more configs can be selected
+ * (multi-select); applying rescopes the whole dashboard via the session's
+ * configFilter (data is refetched for the union of those configs). Store and
+ * Inspector narrow the visible rows client-side.
  */
 export interface PortfolioFilters {
   store: string | null;
@@ -64,36 +65,39 @@ export function FilterDrawer({
   onApply: (f: PortfolioFilters) => void;
 }) {
   const { dateRange, setDateRange, setConfigFilter } = useSession();
-  const { configs, activeConfig } = useSmartInspectPermissions();
-  // useSmartInspectPermissions rebuilds `activeConfig` as a NEW object every
-  // render, so derive a stable primitive (the config name) to drive the re-sync
-  // effect. Depending on the object reset the in-drawer selection on every
-  // render, so the Config dropdown couldn't be changed.
-  const activeConfigName = activeConfig?.configName ?? null;
+  const { configs, selectedConfigNames } = useSmartInspectPermissions();
+  // useSmartInspectPermissions rebuilds `selectedConfigNames` as a NEW array
+  // every render, so derive a stable primitive (a JSON key) to drive the
+  // re-sync effect. Depending on the array reset the in-drawer selection on
+  // every render, so the Config checkboxes couldn't be changed.
+  const selectedKey = JSON.stringify(selectedConfigNames);
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<PortfolioFilters>(filters);
-  const [draftConfig, setDraftConfig] = React.useState<string | null>(
-    activeConfigName
+  const [draftConfigs, setDraftConfigs] = React.useState<string[]>(
+    () => JSON.parse(selectedKey) as string[]
   );
 
   React.useEffect(() => {
-    // Re-sync the draft only when the drawer OPENS (or the applied config /
+    // Re-sync the draft only when the drawer OPENS (or the applied configs /
     // filters change) — never on every render, or it clobbers the user's
     // in-drawer selection before they can apply it.
     if (open) {
       setDraft(filters);
-      setDraftConfig(activeConfigName);
+      setDraftConfigs(JSON.parse(selectedKey) as string[]);
     }
-  }, [open, filters, activeConfigName]);
+  }, [open, filters, selectedKey]);
 
   const configNames = configs.map((c) => c.configName);
   const multiConfig = configNames.length > 1;
-  // Store options cascade from the DRAFT config's permitted stores ("All
-  // configs" unions every program's stores; dedupe shared store names).
-  const draftConfigStores =
-    draftConfig === ALL_CONFIGS
-      ? configs.flatMap((c) => c.stores)
-      : (configs.find((c) => c.configName === draftConfig)?.stores ?? []);
+  const allChecked =
+    configNames.length > 0 &&
+    configNames.every((n) => draftConfigs.includes(n));
+  const someChecked = draftConfigs.length > 0 && !allChecked;
+  // Store options cascade from the union of the DRAFT-selected configs' stores
+  // (dedupe store names shared across programs).
+  const draftConfigStores = configs
+    .filter((c) => draftConfigs.includes(c.configName))
+    .flatMap((c) => c.stores);
   const storeNames = [
     ...new Set(draftConfigStores.map((s) => s.storeName)),
   ].sort();
@@ -103,8 +107,8 @@ export function FilterDrawer({
 
   const activeCount = Object.values(filters).filter(Boolean).length;
 
-  function apply(next: PortfolioFilters, config: string | null) {
-    setConfigFilter(config);
+  function apply(next: PortfolioFilters, nextConfigs: string[]) {
+    setConfigFilter(nextConfigs);
     onApply(next);
   }
 
@@ -163,28 +167,68 @@ export function FilterDrawer({
               </label>
             </div>
 
-            <label className="block">
+            <div className="block">
               <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                Config
+                {multiConfig ? "Configs" : "Config"}
               </span>
-              <select
-                value={draftConfig ?? ""}
-                onChange={(e) => {
-                  // Changing config resets the store filter — the store list
-                  // cascades from the selected config.
-                  setDraftConfig(e.target.value || null);
-                  setDraft((d) => ({ ...d, store: null }));
-                }}
-                className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {multiConfig && <option value={ALL_CONFIGS}>All Configs</option>}
+              <div className="space-y-2 rounded-md border border-input bg-card p-3">
+                {multiConfig && (
+                  <label className="flex items-center gap-2 border-b border-border pb-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-900"
+                      checked={allChecked}
+                      ref={(el) => {
+                        // Indeterminate when only some configs are checked.
+                        if (el) el.indeterminate = someChecked;
+                      }}
+                      onChange={(e) => {
+                        // Toggling "All configs" selects/clears every program;
+                        // changing the scope resets the store filter.
+                        setDraftConfigs(
+                          e.target.checked ? [...configNames] : []
+                        );
+                        setDraft((d) => ({ ...d, store: null }));
+                      }}
+                    />
+                    All configs
+                  </label>
+                )}
                 {configNames.map((name) => (
-                  <option key={name} value={name}>
+                  <label key={name} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-brand-900"
+                      checked={draftConfigs.includes(name)}
+                      // A single permitted config is always in scope (nothing
+                      // to multi-select), so lock it on.
+                      disabled={!multiConfig}
+                      onChange={(e) => {
+                        // Changing the config scope resets the store filter —
+                        // the store list cascades from the checked configs.
+                        setDraftConfigs((cur) =>
+                          e.target.checked
+                            ? [...cur, name]
+                            : cur.filter((n) => n !== name)
+                        );
+                        setDraft((d) => ({ ...d, store: null }));
+                      }}
+                    />
                     {name}
-                  </option>
+                  </label>
                 ))}
-              </select>
-            </label>
+                {configNames.length === 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    No configs available.
+                  </span>
+                )}
+              </div>
+              {draftConfigs.length === 0 && configNames.length > 0 && (
+                <span className="mt-1 block text-xs text-status-failed">
+                  Select at least one config.
+                </span>
+              )}
+            </div>
             <Select
               label="Store"
               value={draft.store}
@@ -204,17 +248,21 @@ export function FilterDrawer({
               variant="outline"
               className="flex-1"
               onClick={() => {
+                // Reset filters and the config scope back to the default
+                // single (first) program.
+                const def = configNames.slice(0, 1);
                 setDraft(EMPTY_FILTERS);
-                setDraftConfig(configNames[0] ?? null);
-                apply(EMPTY_FILTERS, null);
+                setDraftConfigs(def);
+                apply(EMPTY_FILTERS, def);
               }}
             >
               Clear filters
             </Button>
             <Button
               className="flex-1"
+              disabled={draftConfigs.length === 0}
               onClick={() => {
-                apply(draft, draftConfig);
+                apply(draft, draftConfigs);
                 setOpen(false);
               }}
             >
