@@ -292,13 +292,13 @@ export function renderStoreReportDoc(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [["Check Area", "Total", "Acceptable", "Deficiency", "Status"]],
+      head: [["Check Area", "Total", "Acceptable", "Status", "Deficiency"]],
       body: areas.map((a) => [
         a.checkAreaName,
         String(a.totalCount),
         String(a.acceptableCount),
-        deficiencyNamesForArea(a) || "—",
         STATUS_LABEL[a.status],
+        deficiencyNamesForArea(a) || "—",
       ]),
       headStyles,
       styles: baseStyles,
@@ -308,9 +308,9 @@ export function renderStoreReportDoc(
         2: { halign: "right" },
       },
       didParseCell: (d) => {
-        if (d.column.index === 4) colorStatusCell(d as never);
+        if (d.column.index === 3) colorStatusCell(d as never);
         // Reported deficiency name(s) in red, in place of a count (Vince's request).
-        if (d.column.index === 3 && d.section === "body") {
+        if (d.column.index === 4 && d.section === "body") {
           const txt = (d.cell.text?.[0] ?? "") as string;
           if (txt && txt !== "—") {
             d.cell.styles.textColor = RED;
@@ -376,13 +376,11 @@ export function renderStoreReportDoc(
     }
   }
 
-  // Inspector Notes — same card styling as Deficiencies; its own page, never split.
+  // Inspector Notes — flow directly under the Deficiency cards, divided by a
+  // separator, so a short Deficiencies page doesn't look like the report ended.
+  // Only break to a fresh page when there's no Deficiencies block above or no room.
   const notes = store.notes.slice(0, MAX_NOTES);
   if (notes.length > 0) {
-    doc.addPage();
-    y = margin;
-    section("Inspector Notes");
-    y += 4;
     const cols = 2;
     const gap = 6;
     const cardW = (contentW - gap * (cols - 1)) / cols;
@@ -394,6 +392,21 @@ export function renderStoreReportDoc(
       const lines = doc.splitTextToSize(n.noteText || "—", cardW) as string[];
       return lines.length > 4 ? lines.slice(0, 4) : lines;
     };
+    const firstRowH =
+      imgH + 5 + Math.max(...notes.slice(0, cols).map((n) => wrap(n).length)) * lineH + 6;
+    if (deficiencyPhotos.length > 0 && y + 20 + firstRowH <= pageH - 16) {
+      // Divider between Deficiencies and Notes on the same page.
+      y += 5;
+      doc.setDrawColor(210, 214, 219);
+      doc.setLineWidth(0.4);
+      doc.line(margin, y, pageW - margin, y);
+      y += 9;
+    } else {
+      doc.addPage();
+      y = margin;
+    }
+    section("Inspector Notes");
+    y += 4;
     for (let i = 0; i < notes.length; i += cols) {
       const rowNotes = notes.slice(i, i + cols);
       const rowH = imgH + 5 + Math.max(...rowNotes.map((n) => wrap(n).length)) * lineH + 6;
