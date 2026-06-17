@@ -32,7 +32,8 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   (`VITE_ENABLE_MOCK_DATA=false`). Re-addable if a sales-demo build is needed.
 - **PDF exports are real** (jsPDF + jspdf-autotable, lazy-loaded): `src/utils/storePdf.ts`
   (My Store report) and `src/utils/portfolioPdf.ts` (landscape portfolio report). Wired to the
-  Export buttons on Store Manager and Portfolio Overview.
+  Export buttons on Store Manager and Portfolio Overview. The store PDF now embeds deficiency
+  photos + inspector notes and `renderStorePdf` is **async** — see the 2026-06-17 session below.
 ### 2026-06-15 session (shipped)
 
 - **Default view = Today + global date filter.** Every dashboard lands on Today
@@ -135,6 +136,57 @@ through the SI API and presents a cleaner Wegmans-specific dashboard.
   `npm run dev`** (demo bypasses login → no `isAdmin`; Score Settings is hidden in demo now too) — verify
   it on the deployed site signed in as `vincent.maione1@gmail.com`. The config-filter fix + All Configs DO
   show in demo (boss has >1 config).
+
+### 2026-06-17 session (store-report PDF overhaul)
+
+Big enhancement to the **store** report PDF (`src/utils/storePdfLayout.ts`, shared by the browser
+Export PDF and the emailed report). The **portfolio** PDF (`portfolioPdfLayout.ts`) is intentionally
+left untouched (Vince's call).
+
+- **Check Areas table:** dropped the **QSP** column; the numeric Deficiencies count + the attribute
+  name were merged into ONE red **Deficiency** column (shows the reported attribute(s), e.g.
+  "Buildup, Dust"; "—" when clean) — and that column is now **last**. Order: Check Area · Total ·
+  Acceptable · Status · Deficiency.
+- **Action Items removed everywhere** — the store-PDF KPI, the Store Manager dashboard KPI, AND the
+  "Current Action Items" table in the Store Detail modal; **`ActionItemsTable.tsx` deleted**. (It had
+  been "distinct deficiency types," confusingly close to the raw Deficiencies count.)
+- **Two photo sections** between Top Deficiencies and Recent Inspections: **Deficiencies** photo cards
+  (3/row: framed photo + area + red deficiency) and **Inspector Notes** (cards, 2/row: framed photo on
+  top + store name + note text). Notes flow **directly under** the Deficiency cards with a divider
+  (NOT their own page — a short Deficiencies page used to look like the document ended). Both start on
+  their own page and **paginate without splitting a card** ("(cont.)" headers). Ceilings
+  `MAX_DEFICIENCY_PHOTOS`/`MAX_NOTES` = 60 — sections paginate, never truncate.
+- **Notes are a new normalized type** `NoteReport` on `StoreReport`, built in
+  `reportingTransforms.transformStoreReport` from the **`noteRecords`** side of
+  `inspection.imageRecords` (`SIInspectionNote`: `noteText`, `noteCategory`, `outerTier`, photo URL on
+  `url`/`photo`). Surfaced in the browser client (`extractNoteRecords`) + mock (`getMockNotes`).
+- **Emailed store PDF now includes photos + notes** (previously had neither):
+  `api/_lib/sendReport.ts fetchStoreData` adds the `inspection.imageRecords` widget; `buildStoreReport`
+  passes a photo resolver (record id → CDN `url`) + the note records into `transformStoreReport`.
+- **Image embedding (programmatic, no html2canvas).** `renderStorePdf` is now **ASYNC** — it
+  pre-fetches every photo to base64 and injects them into the shared layout via an injected
+  `resolveImage(url) => EmbeddedImage|null` lookup (layout stays sync + env-agnostic). New pure helper
+  `src/utils/imageMeta.ts` (`decodeImageMeta` → JPEG/PNG format + intrinsic dims for aspect-correct
+  fit). The **server** (`api/_lib/reportPdf.ts`) fetches the SI CDN directly in Node; the **browser**
+  (`src/utils/storePdf.ts`) fetches via a NEW same-origin proxy **`api/si-image.ts`** (host-allowlisted
+  to `smartinspect-files.mysmartinspect.com`, session-gated) to dodge CORS. Unsplash demo images load
+  directly. Missing/unsupported images render a "Photo unavailable" box and never block the PDF.
+- **New live facts:** SI file CDN = `smartinspect-files.mysmartinspect.com`; the inspection-photo URL
+  field on `imageRecords.inspectionRecords` is **`url`**. Member **22450** (Brian Cornuta) has
+  `rules.accessAllOuterTiers: true` with explicit grants = the 3 pilot stores across Pre-Launch configs
+  (20637 ABS / Tysons Corner, 20633 CSG / Johnson City, 20635 Tec / Military Road).
+- **Scheduled-report scope clarification (no code change):** emailed-report scope reads the
+  **subscribed member's** explicit `permissionOuterTiers` and **ignores `rules.accessAllOuterTiers`**.
+  A "portfolio report not respecting permissions" report turned out to be test confusion — perms were
+  being edited on the `vmaione@` account, not the subscribed member 30 (`vincent.maione1`). To test
+  scoping, edit the SUBSCRIBED member (30 = vincent.maione1, 22450 = Brian); flipping a member to "all
+  outer tiers" with an empty explicit list resolves to **0 Floorcare stores → skipped**, not "all."
+- **STATUS:** commits `b5f32b7` (initial photos/notes), `b63ed74` (drop QSP / merge deficiency / card
+  notes / own-page), and `2f468ed` (remove Action Items + pagination) are on **`main` and pushed**. The
+  final `storePdfLayout.ts` tweaks (Deficiency column last + notes-flow-under-deficiencies divider) are
+  a separate commit made at the end of this session — confirm it pushed and Vercel rebuilt `main`.
+  Reminder: `renderStorePdf` is async now (callers must `await`); `api/si-image.ts` uses relative `.js`
+  imports (safe re: the deployed-`/api` `@/` runtime gotcha).
 
 ## Stack
 
