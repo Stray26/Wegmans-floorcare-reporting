@@ -13,7 +13,6 @@ import { ScoreGauge } from "@/components/dashboard/ScoreGauge";
 import { QspTrendChart } from "@/components/dashboard/QspTrendChart";
 import { TopDeficienciesList } from "@/components/dashboard/TopDeficienciesList";
 import { CheckAreaTable } from "./CheckAreaTable";
-import { ActionItemsTable } from "./ActionItemsTable";
 import { TicketsTable } from "./TicketsTable";
 import { PhotoGallery } from "./PhotoGallery";
 import { useToast } from "@/components/ui/toast";
@@ -147,13 +146,7 @@ export function StoreDetailModal({
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  <Card className="p-5">
-                    <h3 className="mb-3 text-sm font-semibold">
-                      Current Action Items
-                    </h3>
-                    <ActionItemsTable store={store} />
-                  </Card>
+                <div className="mt-5">
                   <Card className="p-5">
                     <h3 className="mb-3 text-sm font-semibold">Score Trend</h3>
                     <QspTrendChart trend={store.trend} />

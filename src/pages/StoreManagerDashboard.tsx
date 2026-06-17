@@ -87,7 +87,6 @@ export function StoreManagerDashboard() {
   const attentionAreas = [...store.checkAreas]
     .filter((c) => c.status !== "passed")
     .sort((a, b) => a.qspScore - b.qspScore);
-  const actionItemCount = store.deficiencies.filter((d) => d.count > 0).length;
 
   return (
     <div className="pb-6">
@@ -173,9 +172,8 @@ export function StoreManagerDashboard() {
           </Card>
 
           {/* Quick KPIs */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <KpiCard label="Inspections" value={store.inspectionsCompleted} />
-            <KpiCard label="Action Items" value={actionItemCount} status={actionItemCount ? "needs-improvement" : "passed"} />
             <KpiCard label="Open Tickets" value={store.openTicketCount} />
             <KpiCard label="Deficiencies" value={store.deficiencyCount} />
           </div>

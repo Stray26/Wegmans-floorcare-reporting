@@ -33,9 +33,13 @@ export interface EmbeddedImage {
 /** Returns the embedded bytes for a photo URL, or null to show a placeholder. */
 export type ResolveImage = (url: string) => EmbeddedImage | null;
 
-/** How many photos/notes to render so the PDF stays a sensible size. */
-export const MAX_DEFICIENCY_PHOTOS = 6;
-export const MAX_NOTES = 6;
+/**
+ * Safety ceiling on how many photos/notes to embed (guards email size). High
+ * enough to include everything for a normal store + date range; the sections
+ * paginate across pages rather than truncating.
+ */
+export const MAX_DEFICIENCY_PHOTOS = 60;
+export const MAX_NOTES = 60;
 
 /**
  * The exact set of photo URLs the store layout will try to embed (deficiency
@@ -216,12 +220,10 @@ export function renderStoreReportDoc(
 
   /* ---------------------------- KPI strip ---------------------------- */
   let y = bandY + bandH + 8;
-  const actionItems = store.deficiencies.filter((d) => d.count > 0).length;
   const kpis: [string, string][] = [
     ["Uploaded", store.uploaded ? "Yes" : "No"],
     ["Last Upload", fmtDate(store.lastUploadedAt)],
     ["Inspections", String(store.inspectionsCompleted)],
-    ["Action Items", String(actionItems)],
     ["Open Tickets", String(store.openTicketCount)],
     ["Deficiencies", String(store.deficiencyCount)],
   ];
@@ -351,22 +353,27 @@ export function renderStoreReportDoc(
     const cardW = (contentW - gap * (cols - 1)) / cols;
     const imgH = cardW * 0.62;
     const cardH = imgH + 13;
-    deficiencyPhotos.forEach((p: PhotoReport, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = margin + col * (cardW + gap);
-      const cy = y + row * (cardH + 6);
-      drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, cy, cardW, imgH);
-      let ty = cy + imgH + 4;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(...INK);
-      doc.text(doc.splitTextToSize(p.checkAreaName ?? "—", cardW)[0] ?? "", x, ty);
-      ty += 4.5;
-      doc.setTextColor(...RED);
-      doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, ty);
-    });
-    y += Math.ceil(deficiencyPhotos.length / cols) * (cardH + 6);
+    for (let i = 0; i < deficiencyPhotos.length; i += cols) {
+      if (y + cardH > pageH - 16) {
+        doc.addPage();
+        y = margin;
+        section("Deficiencies (cont.)");
+        y += 4;
+      }
+      deficiencyPhotos.slice(i, i + cols).forEach((p: PhotoReport, c) => {
+        const x = margin + c * (cardW + gap);
+        drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
+        let ty = y + imgH + 4;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(...INK);
+        doc.text(doc.splitTextToSize(p.checkAreaName ?? "—", cardW)[0] ?? "", x, ty);
+        ty += 4.5;
+        doc.setTextColor(...RED);
+        doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, ty);
+      });
+      y += cardH + 6;
+    }
   }
 
   // Inspector Notes — same card styling as Deficiencies; its own page, never split.
@@ -390,6 +397,12 @@ export function renderStoreReportDoc(
     for (let i = 0; i < notes.length; i += cols) {
       const rowNotes = notes.slice(i, i + cols);
       const rowH = imgH + 5 + Math.max(...rowNotes.map((n) => wrap(n).length)) * lineH + 6;
+      if (y + rowH > pageH - 16) {
+        doc.addPage();
+        y = margin;
+        section("Inspector Notes (cont.)");
+        y += 4;
+      }
       rowNotes.forEach((n: NoteReport, c) => {
         const x = margin + c * (cardW + gap);
         const img = n.photoUrl && resolveImage ? resolveImage(n.photoUrl) : null;
