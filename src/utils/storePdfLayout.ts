@@ -290,14 +290,12 @@ export function renderStoreReportDoc(
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [["Check Area", "Total", "Acceptable", "Deficiencies", "Deficiency", "QSP", "Status"]],
+      head: [["Check Area", "Total", "Acceptable", "Deficiency", "Status"]],
       body: areas.map((a) => [
         a.checkAreaName,
         String(a.totalCount),
         String(a.acceptableCount),
-        String(a.deficiencyCount),
         deficiencyNamesForArea(a) || "—",
-        fmtScore(a.qspScore),
         STATUS_LABEL[a.status],
       ]),
       headStyles,
@@ -306,13 +304,11 @@ export function renderStoreReportDoc(
       columnStyles: {
         1: { halign: "right" },
         2: { halign: "right" },
-        3: { halign: "right" },
-        5: { halign: "right" },
       },
       didParseCell: (d) => {
-        if (d.column.index === 6) colorStatusCell(d as never);
-        // The actual reported deficiency shown in red (Vince's request).
-        if (d.column.index === 4 && d.section === "body") {
+        if (d.column.index === 4) colorStatusCell(d as never);
+        // Reported deficiency name(s) in red, in place of a count (Vince's request).
+        if (d.column.index === 3 && d.section === "body") {
           const txt = (d.cell.text?.[0] ?? "") as string;
           if (txt && txt !== "—") {
             d.cell.styles.textColor = RED;
@@ -341,11 +337,13 @@ export function renderStoreReportDoc(
     y = finalY() + 8;
   }
 
-  // Deficiencies (photo cards: area + reported deficiency + photo)
+  // Deficiencies (photo cards) — forced onto its own page so it never splits.
   const deficiencyPhotos = store.photos
     .filter((p) => p.deficiencyName && p.deficiencyName.toLowerCase() !== "acceptable")
     .slice(0, MAX_DEFICIENCY_PHOTOS);
   if (deficiencyPhotos.length > 0) {
+    doc.addPage();
+    y = margin;
     section("Deficiencies");
     y += 4;
     const cols = 3;
@@ -355,13 +353,11 @@ export function renderStoreReportDoc(
     const cardH = imgH + 13;
     deficiencyPhotos.forEach((p: PhotoReport, i) => {
       const col = i % cols;
-      if (col === 0 && y + cardH > pageH - 16) {
-        doc.addPage();
-        y = margin;
-      }
+      const row = Math.floor(i / cols);
       const x = margin + col * (cardW + gap);
-      drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
-      let ty = y + imgH + 4;
+      const cy = y + row * (cardH + 6);
+      drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, cy, cardW, imgH);
+      let ty = cy + imgH + 4;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(...INK);
@@ -369,56 +365,48 @@ export function renderStoreReportDoc(
       ty += 4.5;
       doc.setTextColor(...RED);
       doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, ty);
-      if (col === cols - 1 || i === deficiencyPhotos.length - 1) y += cardH + 6;
     });
+    y += Math.ceil(deficiencyPhotos.length / cols) * (cardH + 6);
   }
 
-  // Inspector Notes (photo as the focal area + store name + note text)
+  // Inspector Notes — same card styling as Deficiencies; its own page, never split.
   const notes = store.notes.slice(0, MAX_NOTES);
   if (notes.length > 0) {
+    doc.addPage();
+    y = margin;
     section("Inspector Notes");
     y += 4;
-    const imgW = Math.min(95, contentW * 0.5);
-    const imgH = imgW * 0.62;
-    notes.forEach((n: NoteReport) => {
-      const img = n.photoUrl && resolveImage ? resolveImage(n.photoUrl) : null;
-      const hasPhoto = !!n.photoUrl;
-      const textX = hasPhoto ? margin + imgW + 6 : margin;
-      const textW = hasPhoto ? contentW - imgW - 6 : contentW;
+    const cols = 2;
+    const gap = 6;
+    const cardW = (contentW - gap * (cols - 1)) / cols;
+    const imgH = cardW * 0.45;
+    const lineH = 4;
+    const wrap = (n: NoteReport): string[] => {
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      const bodyLines = doc.splitTextToSize(n.noteText || "—", textW) as string[];
-      const textBlockH = 6 + bodyLines.length * 4 + 5;
-      const rowH = Math.max(hasPhoto ? imgH : 0, textBlockH);
-      if (y + rowH > pageH - 16) {
-        doc.addPage();
-        y = margin;
-      }
-      if (hasPhoto) drawFittedImage(doc, img, margin, y, imgW, imgH);
-      let ty = y + 4;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.setTextColor(...INK);
-      doc.text(n.storeName, textX, ty);
-      ty += 5.5;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(...INK);
-      doc.text(bodyLines, textX, ty);
-      ty += bodyLines.length * 4 + 1;
-      const metaBits = [n.checkAreaName, n.inspector, fmtDate(n.capturedAt)].filter(
-        (b): b is string => !!b
-      );
-      if (metaBits.length > 0) {
-        doc.setFontSize(7.5);
-        doc.setTextColor(...MUTED);
-        doc.text(metaBits.join("  ·  "), textX, ty);
-      }
-      y += rowH + 7;
-      doc.setDrawColor(232, 235, 238);
-      doc.setLineWidth(0.2);
-      doc.line(margin, y - 3.5, pageW - margin, y - 3.5);
-    });
+      doc.setFontSize(8);
+      const lines = doc.splitTextToSize(n.noteText || "—", cardW) as string[];
+      return lines.length > 4 ? lines.slice(0, 4) : lines;
+    };
+    for (let i = 0; i < notes.length; i += cols) {
+      const rowNotes = notes.slice(i, i + cols);
+      const rowH = imgH + 5 + Math.max(...rowNotes.map((n) => wrap(n).length)) * lineH + 6;
+      rowNotes.forEach((n: NoteReport, c) => {
+        const x = margin + c * (cardW + gap);
+        const img = n.photoUrl && resolveImage ? resolveImage(n.photoUrl) : null;
+        drawFittedImage(doc, img, x, y, cardW, imgH);
+        let ty = y + imgH + 4.5;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(...INK);
+        doc.text(n.storeName, x, ty);
+        ty += 4.5;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...INK);
+        doc.text(wrap(n), x, ty);
+      });
+      y += rowH + 6;
+    }
   }
 
   // Recent Inspections
