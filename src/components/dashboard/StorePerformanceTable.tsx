@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { formatScore, formatRelativeDays } from "@/utils/formatting";
 import type { StoreReport, ScoreStatus } from "@/types/reporting";
 
-type SortKey = "store" | "qsp" | "uploaded" | "status" | "tickets";
+type SortKey = "store" | "qsp" | "uploaded" | "status";
 
 const STATUS_ORDER: Record<ScoreStatus, number> = {
   failed: 0,
@@ -71,8 +71,6 @@ export function StorePerformanceTable({
           );
         case "status":
           return (STATUS_ORDER[a.status] - STATUS_ORDER[b.status]) * dir;
-        case "tickets":
-          return (a.openTicketCount - b.openTicketCount) * dir;
         default:
           return 0;
       }
@@ -115,7 +113,6 @@ export function StorePerformanceTable({
             <SortHead label="QSP Score" k="qsp" />
             <SortHead label="Status" k="status" />
             <TableHead>Top Deficiency</TableHead>
-            <SortHead label="Open Tickets" k="tickets" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -138,21 +135,12 @@ export function StorePerformanceTable({
               <TableCell className="text-muted-foreground">
                 {s.topDeficiency ?? "—"}
               </TableCell>
-              <TableCell>
-                {s.openTicketCount > 0 ? (
-                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-2 text-xs font-medium">
-                    {s.openTicketCount}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">0</span>
-                )}
-              </TableCell>
             </TableRow>
           ))}
           {pageRows.length === 0 && (
             <TableRow className="hover:bg-transparent">
               <TableCell
-                colSpan={6}
+                colSpan={5}
                 className="py-10 text-center text-muted-foreground"
               >
                 No stores match the current filters.
