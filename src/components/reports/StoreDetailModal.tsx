@@ -154,11 +154,7 @@ export function StoreDetailModal({
               {/* Check Areas */}
               <TabsContent value="areas">
                 <Card className="p-2">
-                  <CheckAreaAccordion
-                    areas={store.checkAreas}
-                    photos={store.photos}
-                    showDeficiencyBreakdown={false}
-                  />
+                  <CheckAreaAccordion areas={store.checkAreas} photos={store.photos} />
                 </Card>
               </TabsContent>
 

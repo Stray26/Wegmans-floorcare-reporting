@@ -10,11 +10,9 @@ import type { CheckAreaReport, PhotoReport } from "@/types/reporting";
 function AreaRow({
   area,
   photos,
-  showDeficiencyBreakdown,
 }: {
   area: CheckAreaReport;
   photos: PhotoReport[];
-  showDeficiencyBreakdown: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const { dateRange } = useSession();
@@ -23,7 +21,6 @@ function AreaRow({
   const singleDay = dateRange.start === dateRange.end;
 
   const areaPhotos = photos.filter((p) => p.checkAreaName === area.checkAreaName);
-  const defTotal = area.deficiencyBreakdown.reduce((s, d) => s + d.count, 0) || 1;
 
   return (
     <div className="border-b border-border last:border-0">
@@ -76,31 +73,6 @@ function AreaRow({
               ))}
             </div>
           )}
-          {showDeficiencyBreakdown && (area.deficiencyBreakdown.length > 0 ? (
-            <div className="space-y-2">
-              {area.deficiencyBreakdown.map((d) => (
-                <div key={d.deficiencyName} className="flex items-center gap-3">
-                  <div className="w-28 shrink-0 text-sm font-medium">
-                    {d.deficiencyName}
-                  </div>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-brand-900"
-                      style={{ width: `${(d.count / defTotal) * 100}%` }}
-                    />
-                  </div>
-                  <div className="w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
-                    {d.count} · {d.percentage.toFixed(0)}%
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-status-passed">
-              All checks acceptable in this area.
-            </p>
-          ))}
-
           {areaPhotos.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -118,11 +90,9 @@ function AreaRow({
 export function CheckAreaAccordion({
   areas,
   photos,
-  showDeficiencyBreakdown = true,
 }: {
   areas: CheckAreaReport[];
   photos: PhotoReport[];
-  showDeficiencyBreakdown?: boolean;
 }) {
   if (areas.length === 0) {
     return (
@@ -134,12 +104,7 @@ export function CheckAreaAccordion({
   return (
     <div>
       {areas.map((a) => (
-        <AreaRow
-          key={a.checkAreaId}
-          area={a}
-          photos={photos}
-          showDeficiencyBreakdown={showDeficiencyBreakdown}
-        />
+        <AreaRow key={a.checkAreaId} area={a} photos={photos} />
       ))}
     </div>
   );
