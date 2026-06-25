@@ -214,6 +214,53 @@ left untouched (Vince's call).
   `datetime.ts` passing under process `TZ`=UTC/America-New_York/Asia-Tokyo (EDT in summer, EST in winter).
 - **STATUS: uncommitted on `main` (8 edits + new `src/utils/datetime.ts`).** Ship via branch
   `feature/eastern-time-reports` → merge to `main` → Vercel auto-deploys (cron change needs the deploy).
+  **(Shipped 2026-06-25 in the batch below.)**
+
+### 2026-06-25 session (config reversion, QSP-from-API, UI cleanup — mostly on `main`)
+
+Large session. Most shipped to `main` (commits `87e9b05`, `34554d0`, `5a7e3ab`, `62f7fee`, `26593f2`);
+the final UI tweaks (modal/table/sidebar) were uncommitted at session end.
+
+- **Config reversion + granular area types.** Vince added area types in SI, which re-versioned the
+  three Pre-Launch configs: SI archived the originals (20633 CSG / 20635 Tec / 20637 ABS → "… Archived")
+  and created NEW active IDs **20754 ABS / 20755 CSG / 20756 Tec**. `FLOORCARE_CONFIG_IDS` updated;
+  `isFloorcareConfig` now excludes names matching `/\b(archived|test)\b/i` (stray "Test Config" 20745).
+  The inspection hierarchy ALSO gained a level: the numbered area ("01. Vestibules"…) moved from
+  `checkmark` → **`selectTier`**, and `checkmark` is now a granular **item** ("Baseboards", "High
+  Traffic Lane"…) whose names recur across areas. The app grouped check areas by `checkmark`, so new
+  inspections rendered items as the "areas" — fixed: `reportingTransforms` groups by `selectTier`
+  (numbered-area detection falls back to old `checkmark` for historical data) with nested
+  `CheckPointReport[]` points. Vince chose **Option 2** (10 areas, each expandable to its points) →
+  `CheckAreaAccordion` drill-down; `mockData` emits the two-level shape.
+- **QSP now comes from the Smart Inspect API (big data-layer change).** Vince corrected a long-standing
+  wrong assumption: **runWidgets does NOT filter by config/store NAME — it filters by `configIds` +
+  `outerTierIds` (ID arrays) and IGNORES the name arrays the app sent.** That was the real cause of the
+  All-Configs over-fetch (a store's records came back in every program fetch → 3× counts). Fix: every
+  `runWidgets` call (browser portfolio/store, Tickets page, AND the emailed report in
+  `api/_lib/sendReport.ts`) now sends `outerTierIds`/`configIds`; the proxy validates requested
+  `outerTierIds` against the user's permitted IDs (`outerTierIdsFrom` + `reconcileOuterTierIds` in
+  `api/_lib/smartInspect.ts`). The store **QSP score comes from `inspection.qspBy` (by `outerTier`)** —
+  `transformStoreReport` takes an `apiStoreScore` and uses it verbatim (status via thresholds);
+  mock/server falls back to computed. **Area + item scores stay computed** from the now-ID-scoped
+  records — they equal `qspBy` exactly (good÷total) and `qspBy` pools an item across all areas (no
+  per-area item score from the API), plus computing scales (1 call/config). The dedupe workaround was
+  removed (ID scoping makes it unnecessary). `SIFilters` gained `configIds`/`outerTierIds`.
+- **Status terms renamed:** Passed → **Meets Standard**, Failed → **Below Standard** (Needs Improvement
+  / Not Uploaded unchanged). Central: `scoreThresholds.ts` `label` (drives every `StatusBadge` via
+  `getStatusLabel`) + both PDF `STATUS_LABEL` maps + portfolio KPI labels + ScoreSettings text. The
+  internal `"passed"`/`"failed"` status KEYS are unchanged.
+- **Store PDF "Deficiencies by Area":** deficiency photos sorted by area (worst first) in a dense 3-up
+  grid (single-photo areas pack together), each card = **area · item · deficiency**
+  (`PhotoReport.pointName` added; item = the granular checkmark). `storePdfLayout.ts`.
+- **Portfolio store modal** uses `CheckAreaAccordion` (drill-down) not the flat table; header
+  reformatted then the **score number removed** (status badge only, top-right). The accordion's
+  **deficiency-breakdown bars were removed everywhere** (modal + Store Manager).
+- **Portfolio Store Performance table:** removed the **City/State, Config, and Open Tickets** columns
+  (+ sorts; `showConfig`/`isMultiConfig` plumbing gone) → Store · Last Uploaded · QSP · Status · Top
+  Deficiency.
+- **Sidebar collapsible** (`Sidebar.tsx`): persisted (localStorage) toggle → `w-16` icons-only rail
+  with tooltips; flex layout reflows. Desktop only.
+- **Eastern-time reports** (prior session's uncommitted work) shipped in this batch.
 
 ## Stack
 
@@ -286,9 +333,23 @@ Wegmans constants centralized in `src/config/wegmans.ts` (10 bilingual check are
 - `inspection.allRecords` returns `{ records: [...], total }` — NOT a bare array. `ticket.getTickets` wraps similarly. `widgetArray()` in the client unwraps `records`/`tickets`/`data`/bare.
 - Record fields: `checkmark` (long text, numbered "01.…"), `checkAttribute` ("Acceptable" / "Buildup" …), `isGood` (true→100/false→0/null→50), `outerTierId`, `count`. Live rows omit `configId`/`state`.
 - Live `getPermissions` `permissionConfigs[]` entries use **`name`** (NOT `configName`) for the
-  config label — `extractPermittedConfigs` reads both and falls back to "Config <id>". Known
-  configIds are pinned to canonical names via `KNOWN_CONFIG_NAMES` (smartInspectClient.ts)
-  because runWidgets matches configs BY NAME — a label mismatch silently fetches 0 records.
+  config label — `extractPermittedConfigs` reads both and falls back to "Config <id>". `KNOWN_CONFIG_NAMES`
+  canonicalizes the permission `name` for display.
+- **⚠️ CORRECTION (2026-06-25): runWidgets filters by `configIds` + `outerTierIds` (ID arrays), NOT by
+  name. The `configs`/`outerTiers` NAME arrays the app used to send are IGNORED by SI** — that was the
+  All-Configs over-fetch cause. Filter by IDs (proven live: `outerTierIds:[198985]` returns only Tysons;
+  the name arrays returned all 3 stores). The proxy validates `outerTierIds`. (Supersedes the old
+  "runWidgets matches configs BY NAME" note.)
+- **QSP score source = `inspection.qspBy`** (`by` ∈ outerTier / selectTier / midTier / inspector /
+  config / checkmark…; requires a `by` value). By `outerTier` = per-store QSP = pooled
+  `numGoodChecks/totalChecks` (e.g. Military Rd 06/24+06/25 = 54/65 = **83.1**). `qspBy` by `checkmark`
+  pools an item across ALL its areas → no per-area item score from the API (compute those). `company.info`
+  has `scoreType:"QSP"`, `highMarkQspScore 0.9`, `minAcceptableQspScore 0.8`, `checkmarkLabel:"Item"`,
+  `selectTierLabel:"Area Type"`. `inspection.list` carries per-inspection `numGoodChecks`/`totalChecks`.
+- **2026-06-25 config reversion:** active Pre-Launch = **20754 ABS / 20755 CSG / 20756 Tec** (old
+  20637/20633/20635 → "… Archived"; stray "Test Config" 20745). NEW per-config outerTierIds: Tysons
+  **198985** (20754), Johnson City **198989** (20755), Military Rd **198993** (20756). (The Apr-2026
+  191864/191941/191958 tiers belong to pilot config 20035 — outerTierIds are per-config.)
 
 ## Auth (feature/si-login)
 
