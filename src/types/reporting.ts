@@ -78,6 +78,8 @@ export interface PhotoReport {
   url: string;
   caption?: string;
   checkAreaName?: string;
+  /** The granular inspection point (checkmark) the photo documents, e.g. "Baseboards". */
+  pointName?: string;
   deficiencyName?: string;
   capturedAt: string;
 }

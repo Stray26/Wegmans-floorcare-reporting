@@ -285,11 +285,13 @@ export function transformStoreReport(
       // (mock: hasPhoto-flagged; live: present in inspection.imageRecords).
       const url = resolvePhotoUrl(r);
       if (!url) continue;
+      const { area, point } = areaAndPoint(r);
       photos.push({
         id: r.id,
         url,
         caption: englishLabel(r.deficiency),
-        checkAreaName: englishLabel(friendlyCheckmark(areaAndPoint(r).area)),
+        checkAreaName: englishLabel(friendlyCheckmark(area)),
+        pointName: point ?? undefined,
         deficiencyName: englishLabel(r.deficiency),
         capturedAt: r.inspectionDate,
       });

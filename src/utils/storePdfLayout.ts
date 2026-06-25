@@ -323,89 +323,66 @@ export function renderStoreReportDoc(
     y = finalY() + 8;
   }
 
-  // Deficiencies by area — group each area's deficiency photos under an area
-  // heading (with that area's reported deficiency types). Forced onto its own
-  // page; paginates without splitting a card, repeating the area heading on
-  // continuation pages. Areas with deficiencies but no photos still list their
-  // deficiency types, so deficiencies are always shown per area.
+  // Deficiency photos — a dense, area-ordered grid. Photos are sorted so each
+  // area's photos cluster (worst area first), and every card is labeled with its
+  // area + the reported deficiency. A continuous 3-up grid keeps using the full
+  // row width even when areas have only one photo each (no empty columns, no
+  // near-blank pages), and it paginates without splitting a card.
   const isDeficiencyPhoto = (p: PhotoReport) =>
     !!p.deficiencyName && p.deficiencyName.toLowerCase() !== "acceptable";
-  const deficiencyPhotosFor = (areaName: string) =>
-    store.photos.filter((p) => isDeficiencyPhoto(p) && p.checkAreaName === areaName);
-  const areasWithDeficiencies = [...store.checkAreas]
-    .filter(
-      (a) => a.deficiencyCount > 0 || deficiencyPhotosFor(a.checkAreaName).length > 0
+  const areaRank = new Map<string, number>(
+    [...store.checkAreas]
+      .sort((a, b) => a.qspScore - b.qspScore)
+      .map((a, i) => [a.checkAreaName, i] as const)
+  );
+  const deficiencyPhotos = store.photos
+    .filter(isDeficiencyPhoto)
+    .sort(
+      (a, b) =>
+        (areaRank.get(a.checkAreaName ?? "") ?? 999) -
+        (areaRank.get(b.checkAreaName ?? "") ?? 999)
     )
-    .sort((a, b) => a.qspScore - b.qspScore);
-  const hasDeficiencySection = areasWithDeficiencies.length > 0;
+    .slice(0, MAX_DEFICIENCY_PHOTOS);
+  const hasDeficiencySection = deficiencyPhotos.length > 0;
   if (hasDeficiencySection) {
     doc.addPage();
     y = margin;
     section("Deficiencies by Area");
     y += 4;
-
     const cols = 3;
     const gap = 5;
     const cardW = (contentW - gap * (cols - 1)) / cols;
     const imgH = cardW * 0.62;
-    const cardH = imgH + 9;
-
-    const areaHeading = (area: StoreReport["checkAreas"][number], cont: boolean) => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.setTextColor(...INK);
-      doc.text(cont ? `${area.checkAreaName} (cont.)` : area.checkAreaName, margin, y);
-      y += 4.5;
-      const defs = deficiencyNamesForArea(area);
-      if (defs && !cont) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
-        doc.setTextColor(...RED);
-        doc.text(doc.splitTextToSize(defs, contentW)[0] ?? "", margin, y);
-        y += 5;
-      } else {
-        y += 1.5;
-      }
-    };
-
-    let embedded = 0;
-    for (const area of areasWithDeficiencies) {
-      if (embedded >= MAX_DEFICIENCY_PHOTOS) break;
-      const photos = deficiencyPhotosFor(area.checkAreaName).slice(
-        0,
-        MAX_DEFICIENCY_PHOTOS - embedded
-      );
-
-      // Keep the heading with its first row of content (no orphan heading).
-      const firstBlockH = 11 + (photos.length > 0 ? cardH : 0);
-      if (y + firstBlockH > pageH - 16) {
+    const cardH = imgH + 17;
+    for (let i = 0; i < deficiencyPhotos.length; i += cols) {
+      if (y + cardH > pageH - 16) {
         doc.addPage();
         y = margin;
         section("Deficiencies by Area (cont.)");
         y += 4;
       }
-      areaHeading(area, false);
-
-      for (let i = 0; i < photos.length; i += cols) {
-        if (y + cardH > pageH - 16) {
-          doc.addPage();
-          y = margin;
-          section("Deficiencies by Area (cont.)");
-          y += 4;
-          areaHeading(area, true);
-        }
-        photos.slice(i, i + cols).forEach((p: PhotoReport, c) => {
-          const x = margin + c * (cardW + gap);
-          drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
+      deficiencyPhotos.slice(i, i + cols).forEach((p: PhotoReport, c) => {
+        const x = margin + c * (cardW + gap);
+        drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
+        let ty = y + imgH + 4;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(...INK);
+        doc.text(doc.splitTextToSize(p.checkAreaName ?? "—", cardW)[0] ?? "", x, ty);
+        ty += 4.2;
+        if (p.pointName) {
           doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.setTextColor(...RED);
-          doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, y + imgH + 4);
-        });
-        embedded += Math.min(cols, photos.length - i);
-        y += cardH + 5;
-      }
-      y += 4;
+          doc.setFontSize(7.5);
+          doc.setTextColor(...INK);
+          doc.text(doc.splitTextToSize(p.pointName, cardW)[0] ?? "", x, ty);
+          ty += 4.2;
+        }
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...RED);
+        doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, ty);
+      });
+      y += cardH + 6;
     }
   }
 

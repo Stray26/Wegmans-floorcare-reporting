@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { ScoreGauge } from "@/components/dashboard/ScoreGauge";
 import { QspTrendChart } from "@/components/dashboard/QspTrendChart";
 import { TopDeficienciesList } from "@/components/dashboard/TopDeficienciesList";
-import { CheckAreaTable } from "./CheckAreaTable";
+import { CheckAreaAccordion } from "./CheckAreaAccordion";
 import { TicketsTable } from "./TicketsTable";
 import { PhotoGallery } from "./PhotoGallery";
 import { useToast } from "@/components/ui/toast";
@@ -157,7 +157,7 @@ export function StoreDetailModal({
               {/* Check Areas */}
               <TabsContent value="areas">
                 <Card className="p-2">
-                  <CheckAreaTable checkAreas={store.checkAreas} />
+                  <CheckAreaAccordion areas={store.checkAreas} photos={store.photos} />
                 </Card>
               </TabsContent>
 
