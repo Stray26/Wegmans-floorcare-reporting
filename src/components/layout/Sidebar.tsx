@@ -8,6 +8,8 @@ import {
   SlidersHorizontal,
   Mail,
   LogOut,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSmartInspectPermissions } from "@/hooks/useSmartInspectPermissions";
@@ -88,14 +90,17 @@ const ADMIN_NAV: NavItem[] = [
   },
 ];
 
-/** Shared NavLink class for sidebar links (active vs. idle states). */
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-    isActive
-      ? "bg-white/10 text-white"
-      : "text-white/70 hover:bg-white/5 hover:text-white"
-  );
+/** Shared NavLink class for sidebar links (active vs. idle; collapsed centers). */
+const navLinkClass =
+  (collapsed: boolean) =>
+  ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "flex items-center gap-3 rounded-md py-2 text-sm font-medium transition-colors",
+      collapsed ? "justify-center px-2" : "px-3",
+      isActive
+        ? "bg-white/10 text-white"
+        : "text-white/70 hover:bg-white/5 hover:text-white"
+    );
 
 export function Sidebar() {
   const { accessMode } = useSmartInspectPermissions();
@@ -104,56 +109,120 @@ export function Sidebar() {
   const items = NAV.filter((n) => !n.modes || n.modes.includes(accessMode));
   const adminItems = user?.isAdmin ? ADMIN_NAV : [];
 
+  // Collapsed state persists across navigation + sessions (desktop only; the
+  // sidebar is hidden on mobile). The flex layout reflows automatically.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("wegmans:sidebarCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem("wegmans:sidebarCollapsed", next ? "1" : "0");
+      } catch {
+        /* ignore (private mode, etc.) */
+      }
+      return next;
+    });
+
   async function onSignOut() {
     await logout();
     navigate("/login", { replace: true });
   }
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col bg-brand-900 text-white md:flex">
-      <div className="px-5 py-5">
-        <BrandLogo />
-        <p className="mt-1.5 text-[11px] text-white/60">Floorcare Compliance</p>
+    <aside
+      className={cn(
+        "hidden shrink-0 flex-col bg-brand-900 text-white transition-[width] duration-200 md:flex",
+        collapsed ? "w-16" : "w-64"
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center py-5",
+          collapsed ? "flex-col gap-3 px-2" : "justify-between px-5"
+        )}
+      >
+        {!collapsed && (
+          <div>
+            <BrandLogo />
+            <p className="mt-1.5 text-[11px] text-white/60">Floorcare Compliance</p>
+          </div>
+        )}
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="rounded-md p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          {collapsed ? (
+            <ChevronsRight className="h-5 w-5" />
+          ) : (
+            <ChevronsLeft className="h-5 w-5" />
+          )}
+        </button>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-2">
+      <nav className={cn("flex-1 space-y-1 py-2", collapsed ? "px-2" : "px-3")}>
         {items.map((item) => (
-          <NavLink key={item.to} to={item.to} className={navLinkClass}>
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={navLinkClass(collapsed)}
+            title={collapsed ? item.label : undefined}
+          >
             {item.icon}
-            {item.label}
+            {!collapsed && item.label}
           </NavLink>
         ))}
 
         {adminItems.length > 0 && (
           <>
-            <p className="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-white/40">
-              Admin
-            </p>
+            {collapsed ? (
+              <div className="my-2 border-t border-white/10" />
+            ) : (
+              <p className="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                Admin
+              </p>
+            )}
             {adminItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className={navLinkClass}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={navLinkClass(collapsed)}
+                title={collapsed ? item.label : undefined}
+              >
                 {item.icon}
-                {item.label}
+                {!collapsed && item.label}
               </NavLink>
             ))}
           </>
         )}
       </nav>
 
-      <div className="border-t border-white/10 px-3 py-3">
+      <div className={cn("border-t border-white/10 py-3", collapsed ? "px-2" : "px-3")}>
         {/* Only when a real SI session exists (demo mode without login has no
             session to end). */}
         {user && (
           <button
             onClick={onSignOut}
-            className="mb-2 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white"
+            title={collapsed ? "Sign out" : undefined}
+            className={cn(
+              "mb-2 flex w-full items-center gap-3 rounded-md py-2 text-sm font-medium text-white/70 transition-colors hover:bg-white/5 hover:text-white",
+              collapsed ? "justify-center px-2" : "px-3"
+            )}
           >
             <LogOut className="h-4 w-4" />
-            Sign out
+            {!collapsed && "Sign out"}
           </button>
         )}
-        <p className="px-3 text-[11px] text-white/50">
-          Powered by Smart Inspect
-        </p>
+        {!collapsed && (
+          <p className="px-3 text-[11px] text-white/50">Powered by Smart Inspect</p>
+        )}
       </div>
     </aside>
   );
