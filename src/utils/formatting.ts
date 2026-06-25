@@ -1,32 +1,19 @@
 /** Display formatting helpers. */
+import { formatDateET, formatDateTimeET } from "@/utils/datetime";
 
 export function formatScore(score: number | null): string {
   if (score === null || Number.isNaN(score)) return "—";
   return `${score.toFixed(1)}%`;
 }
 
+/** Eastern-time date, e.g. "Jun 22, 2026". See src/utils/datetime.ts. */
 export function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDateET(iso);
 }
 
+/** Eastern-time date + time with zone, e.g. "Jun 22, 2026, 7:30 AM EDT". */
 export function formatDateTime(iso: string | null): string {
-  if (!iso) return "Not uploaded";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "Not uploaded";
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTimeET(iso);
 }
 
 export function formatRelativeDays(iso: string | null): string {

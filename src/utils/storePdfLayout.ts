@@ -1,6 +1,9 @@
 import type { jsPDF } from "jspdf";
 import type { UserOptions } from "jspdf-autotable";
 import type { StoreReport, ScoreStatus, PhotoReport, NoteReport } from "@/types/reporting";
+// Relative `.js` (not `@/`): this layout is reachable from the Vercel /api email
+// renderer, where un-bundled ESM can't resolve `@/` at runtime.
+import { formatDateET as fmtDate, formatDateTimeET as fmtDateTime } from "./datetime.js";
 
 /**
  * Shared, environment-agnostic renderer for the store Floorcare PDF. The jsPDF
@@ -76,25 +79,6 @@ const STATUS_LABEL: Record<ScoreStatus, string> = {
 function fmtScore(s: number | null): string {
   return s === null || Number.isNaN(s) ? "—" : `${s.toFixed(1)}%`;
 }
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-function fmtDateTime(iso: string | null): string {
-  if (!iso) return "Not uploaded";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "Not uploaded";
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 const RED: [number, number, number] = [220, 38, 38];
 
 /** Top deficiency attribute name(s) reported in a check area (for the red column). */
@@ -181,7 +165,7 @@ export function renderStoreReportDoc(
   doc.setFontSize(8.5);
   doc.setTextColor(...MUTED);
   doc.text("FLOORCARE COMPLIANCE REPORT", margin, topY + 1);
-  doc.text(`Generated ${new Date().toLocaleString("en-US")}`, pageW - margin, margin + 2, {
+  doc.text(`Generated ${fmtDateTime(new Date().toISOString())}`, pageW - margin, margin + 2, {
     align: "right",
   });
 
@@ -339,40 +323,89 @@ export function renderStoreReportDoc(
     y = finalY() + 8;
   }
 
-  // Deficiencies (photo cards) — forced onto its own page so it never splits.
-  const deficiencyPhotos = store.photos
-    .filter((p) => p.deficiencyName && p.deficiencyName.toLowerCase() !== "acceptable")
-    .slice(0, MAX_DEFICIENCY_PHOTOS);
-  if (deficiencyPhotos.length > 0) {
+  // Deficiencies by area — group each area's deficiency photos under an area
+  // heading (with that area's reported deficiency types). Forced onto its own
+  // page; paginates without splitting a card, repeating the area heading on
+  // continuation pages. Areas with deficiencies but no photos still list their
+  // deficiency types, so deficiencies are always shown per area.
+  const isDeficiencyPhoto = (p: PhotoReport) =>
+    !!p.deficiencyName && p.deficiencyName.toLowerCase() !== "acceptable";
+  const deficiencyPhotosFor = (areaName: string) =>
+    store.photos.filter((p) => isDeficiencyPhoto(p) && p.checkAreaName === areaName);
+  const areasWithDeficiencies = [...store.checkAreas]
+    .filter(
+      (a) => a.deficiencyCount > 0 || deficiencyPhotosFor(a.checkAreaName).length > 0
+    )
+    .sort((a, b) => a.qspScore - b.qspScore);
+  const hasDeficiencySection = areasWithDeficiencies.length > 0;
+  if (hasDeficiencySection) {
     doc.addPage();
     y = margin;
-    section("Deficiencies");
+    section("Deficiencies by Area");
     y += 4;
+
     const cols = 3;
     const gap = 5;
     const cardW = (contentW - gap * (cols - 1)) / cols;
     const imgH = cardW * 0.62;
-    const cardH = imgH + 13;
-    for (let i = 0; i < deficiencyPhotos.length; i += cols) {
-      if (y + cardH > pageH - 16) {
-        doc.addPage();
-        y = margin;
-        section("Deficiencies (cont.)");
-        y += 4;
-      }
-      deficiencyPhotos.slice(i, i + cols).forEach((p: PhotoReport, c) => {
-        const x = margin + c * (cardW + gap);
-        drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
-        let ty = y + imgH + 4;
+    const cardH = imgH + 9;
+
+    const areaHeading = (area: StoreReport["checkAreas"][number], cont: boolean) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...INK);
+      doc.text(cont ? `${area.checkAreaName} (cont.)` : area.checkAreaName, margin, y);
+      y += 4.5;
+      const defs = deficiencyNamesForArea(area);
+      if (defs && !cont) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
-        doc.setTextColor(...INK);
-        doc.text(doc.splitTextToSize(p.checkAreaName ?? "—", cardW)[0] ?? "", x, ty);
-        ty += 4.5;
         doc.setTextColor(...RED);
-        doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, ty);
-      });
-      y += cardH + 6;
+        doc.text(doc.splitTextToSize(defs, contentW)[0] ?? "", margin, y);
+        y += 5;
+      } else {
+        y += 1.5;
+      }
+    };
+
+    let embedded = 0;
+    for (const area of areasWithDeficiencies) {
+      if (embedded >= MAX_DEFICIENCY_PHOTOS) break;
+      const photos = deficiencyPhotosFor(area.checkAreaName).slice(
+        0,
+        MAX_DEFICIENCY_PHOTOS - embedded
+      );
+
+      // Keep the heading with its first row of content (no orphan heading).
+      const firstBlockH = 11 + (photos.length > 0 ? cardH : 0);
+      if (y + firstBlockH > pageH - 16) {
+        doc.addPage();
+        y = margin;
+        section("Deficiencies by Area (cont.)");
+        y += 4;
+      }
+      areaHeading(area, false);
+
+      for (let i = 0; i < photos.length; i += cols) {
+        if (y + cardH > pageH - 16) {
+          doc.addPage();
+          y = margin;
+          section("Deficiencies by Area (cont.)");
+          y += 4;
+          areaHeading(area, true);
+        }
+        photos.slice(i, i + cols).forEach((p: PhotoReport, c) => {
+          const x = margin + c * (cardW + gap);
+          drawFittedImage(doc, resolveImage ? resolveImage(p.url) : null, x, y, cardW, imgH);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(...RED);
+          doc.text(doc.splitTextToSize(p.deficiencyName ?? "", cardW)[0] ?? "", x, y + imgH + 4);
+        });
+        embedded += Math.min(cols, photos.length - i);
+        y += cardH + 5;
+      }
+      y += 4;
     }
   }
 
@@ -394,7 +427,7 @@ export function renderStoreReportDoc(
     };
     const firstRowH =
       imgH + 5 + Math.max(...notes.slice(0, cols).map((n) => wrap(n).length)) * lineH + 6;
-    if (deficiencyPhotos.length > 0 && y + 20 + firstRowH <= pageH - 16) {
+    if (hasDeficiencySection && y + 20 + firstRowH <= pageH - 16) {
       // Divider between Deficiencies and Notes on the same page.
       y += 5;
       doc.setDrawColor(210, 214, 219);

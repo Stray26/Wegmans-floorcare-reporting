@@ -6,6 +6,7 @@ import {
   type SubscriptionRow,
 } from "../_lib/supabase.js";
 import { sendReportForSubscription } from "../_lib/sendReport.js";
+import { etDayOfWeek, etDayOfMonth, isSameEasternDate } from "../../src/utils/datetime.js";
 
 /**
  * GET /api/cron/send-reports — daily Vercel Cron (see vercel.json).
@@ -16,15 +17,16 @@ import { sendReportForSubscription } from "../_lib/sendReport.js";
  * admin service account; report_type decides store vs portfolio output.
  */
 
-function sameUTCDate(a: Date, b: Date): boolean {
-  return a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
-}
-/** Stateless cadence check, run by the once-a-day cron. */
+/**
+ * Stateless cadence check, run by the once-a-day cron. Evaluated on the Eastern
+ * calendar (see src/utils/datetime.ts) so the day-of-week / day-of-month and the
+ * same-day duplicate guard track the Eastern business day, not UTC.
+ */
 function isDue(sub: SubscriptionRow, now: Date): boolean {
-  if (sub.last_sent_at && sameUTCDate(new Date(sub.last_sent_at), now)) return false;
+  if (sub.last_sent_at && isSameEasternDate(new Date(sub.last_sent_at), now)) return false;
   if (sub.frequency === "daily") return true;
-  if (sub.frequency === "weekly") return now.getUTCDay() === (sub.weekly_dow ?? 1);
-  if (sub.frequency === "monthly") return now.getUTCDate() === (sub.monthly_dom ?? 1);
+  if (sub.frequency === "weekly") return etDayOfWeek(now) === (sub.weekly_dow ?? 1);
+  if (sub.frequency === "monthly") return etDayOfMonth(now) === (sub.monthly_dom ?? 1);
   return false;
 }
 

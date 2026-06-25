@@ -6,7 +6,7 @@
     { "source": "/((?!api/|@|src/|node_modules/|.*\\.).*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/cron/send-reports", "schedule": "0 11 * * *" }
+    { "path": "/api/cron/send-reports", "schedule": "0 13 * * *" }
   ],
   "functions": {
     "api/cron/send-reports.ts": { "includeFiles": "public/wegmans-logo.png" }

@@ -1,6 +1,8 @@
 import type { jsPDF } from "jspdf";
 import type { PortfolioReport, ScoreStatus } from "@/types/reporting";
 import type { AutoTableFn, PdfLogo } from "@/utils/storePdfLayout";
+// Relative `.js` (not `@/`): reachable from the Vercel /api email renderer.
+import { formatDateET as fmtDate, formatDateTimeET } from "./datetime.js";
 
 /**
  * Shared, environment-agnostic renderer for the portfolio Floorcare PDF. The
@@ -45,13 +47,6 @@ function fmtScore(s: number | null): string {
 function fmtPct(n: number): string {
   return `${Math.round(n)}%`;
 }
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
 /** Render the full portfolio report into `doc` (landscape). Does not create/save the doc. */
 export function renderPortfolioReportDoc(
   doc: jsPDF,
@@ -83,7 +78,7 @@ export function renderPortfolioReportDoc(
   doc.setFontSize(8.5);
   doc.setTextColor(...MUTED);
   doc.text("FLOORCARE COMPLIANCE · PORTFOLIO REPORT", margin, topY + 1);
-  doc.text(`Generated ${new Date().toLocaleString("en-US")}`, pageW - margin, margin + 2, {
+  doc.text(`Generated ${formatDateTimeET(new Date().toISOString())}`, pageW - margin, margin + 2, {
     align: "right",
   });
 

@@ -2,6 +2,7 @@ import * as React from "react";
 import type { DateRange } from "@/types/reporting";
 import type { DemoRole } from "@/api/mockData";
 import { DEFAULT_MOCK, setMockMode } from "@/api/smartInspectClient";
+import { etTodayISO } from "@/utils/datetime";
 
 /**
  * Demo session state.
@@ -65,9 +66,9 @@ function loadConfigFilter(): string[] {
 function defaultRange(): DateRange {
   // Land on Today. This is a daily upload/compliance check, so the default
   // view answers "who uploaded today, and did they pass?". The quick-pick bar
-  // can widen to 7/30/90 days (or a custom range) at any time.
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const today = iso(new Date());
+  // can widen to 7/30/90 days (or a custom range) at any time. Eastern calendar
+  // day (see src/utils/datetime.ts), not UTC.
+  const today = etTodayISO();
   return { start: today, end: today };
 }
 

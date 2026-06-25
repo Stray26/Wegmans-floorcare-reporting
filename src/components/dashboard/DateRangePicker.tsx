@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { useSession } from "@/context/SessionContext";
 import { Input } from "@/components/ui/input";
 import type { DateRange } from "@/types/reporting";
+import { etTodayISO, etDayISO } from "@/utils/datetime";
 
 /**
  * Date quick-picks for a daily inspection program. "day" presets are a single
@@ -20,23 +21,14 @@ const PRESETS: Preset[] = [
   { label: "90d", kind: "window", days: 90 },
 ];
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-function dayIso(offset: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - offset);
-  return iso(d);
-}
-
 function rangeForPreset(p: Preset): DateRange {
+  // Eastern calendar day (see src/utils/datetime.ts) so "Today" / "Yesterday"
+  // can't roll to the next UTC date for an Eastern viewer in the evening.
   if (p.kind === "day") {
-    const day = dayIso(p.offset);
+    const day = etDayISO(p.offset);
     return { start: day, end: day };
   }
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - p.days);
-  return { start: iso(start), end: iso(end) };
+  return { start: etDayISO(p.days), end: etTodayISO() };
 }
 
 /** The preset label matching the current range, or null when it's custom. */

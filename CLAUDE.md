@@ -188,6 +188,33 @@ left untouched (Vince's call).
   Reminder: `renderStorePdf` is async now (callers must `await`); `api/si-image.ts` uses relative `.js`
   imports (safe re: the deployed-`/api` `@/` runtime gotcha).
 
+### 2026-06-22 session (Eastern-time reports — suggested branch `feature/eastern-time-reports`, NOT committed)
+
+- **All report times/dates now render in Eastern time** (`America/New_York`, auto EST/EDT) regardless of
+  the server clock. New single source of truth **`src/utils/datetime.ts`**: `etTodayISO`, `etDayISO(offset)`,
+  `etDayOfWeek`, `etDayOfMonth`, `isSameEasternDate`, `formatDateET` (a **date-only** `YYYY-MM-DD` is shown
+  verbatim — NOT shifted into ET, which would render the previous day; a full timestamp IS converted to ET),
+  `formatDateTimeET` (adds a zone label, e.g. "Jun 22, 2026, 9:30 AM EDT"). Pure `Intl`/`Date`, **no value
+  `@/` imports** (it's reachable from `/api`, so the PDF layouts import it via relative `./datetime.js`).
+- **UTC bugs fixed:** "Today"/quick-picks (`DateRangePicker.tsx`) + `SessionContext.defaultRange` used
+  `toISOString()` (UTC) so an Eastern evening rolled to *tomorrow*; now ET. The emailed PDFs
+  (`storePdfLayout.ts`/`portfolioPdfLayout.ts`) used `toLocale*` with **no** `timeZone`, so on Vercel (UTC
+  Node) they printed UTC times; now ET (shared layout ⇒ browser export still matches). `sendReport.isoRange`
+  window + `send-reports.isDue` cadence (DOW/DOM + same-day guard) are ET. `formatting.ts` delegates to the
+  ET formatters (all dashboard tables/modals follow automatically).
+- **Cron moved `0 11`→`0 13` UTC** (`vercel.json`) = **9:00 AM EDT** (Vince's pick). ⚠️ Vercel cron is
+  UTC-only, so a fixed UTC instant **drifts EARLIER in winter → 8:00 AM EST** (once clocks fall back, the
+  same UTC moment is an earlier ET wall-clock). A constant 9am-ET year-round would need flipping the cron at
+  the DST boundary, or an hourly cron gated on the ET hour. Takes effect only after deploy.
+- **Left unchanged on purpose:** the SI API date-filter wire format (`${date}T00:00:00Z` +
+  `timezone: America/New_York`) — documented as working; only the date *strings* feeding it are ET now.
+  `mockData.ts` (demo/dev only) stays UTC-anchored.
+- **Verified:** `tsc -b`, `typecheck:api`, `eslint` (0 errors), `vite build` (clean to a scratch outDir; an
+  in-place build only hit a sandbox `dist/` unlink `EPERM`, not a code error), and a TZ unit test of
+  `datetime.ts` passing under process `TZ`=UTC/America-New_York/Asia-Tokyo (EDT in summer, EST in winter).
+- **STATUS: uncommitted on `main` (8 edits + new `src/utils/datetime.ts`).** Ship via branch
+  `feature/eastern-time-reports` → merge to `main` → Vercel auto-deploys (cron change needs the deploy).
+
 ## Stack
 
 React 18 + Vite + TypeScript + Tailwind + shadcn-style UI (hand-rolled on Radix) +

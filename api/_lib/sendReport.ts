@@ -14,6 +14,7 @@ import { sendEmail } from "./email.js";
 import { renderStorePdf, renderPortfolioPdf } from "./reportPdf.js";
 import type { SubscriptionRow } from "./supabase.js";
 import { FLOORCARE_CONFIG, isFloorcareConfig } from "../../src/config/wegmans.js";
+import { etTodayISO, etDayISO } from "../../src/utils/datetime.js";
 import { DEFAULT_THRESHOLDS } from "../../src/config/scoreThresholds.js";
 import { transformApiRecord } from "../../src/types/smartInspect.js";
 import {
@@ -85,11 +86,9 @@ function extractNoteRecords(widgets: SIWidgets): SIInspectionNote[] {
 }
 
 export function isoRange(days: number): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - days);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: iso(start), end: iso(end) };
+  // Eastern calendar window (see src/utils/datetime.ts): end = today ET, start =
+  // `days` ET-days earlier, so the report covers the Eastern business day(s).
+  return { start: etDayISO(days), end: etTodayISO() };
 }
 export function windowDays(freq: SubscriptionRow["frequency"]): number {
   return freq === "daily" ? 1 : freq === "weekly" ? 7 : 30;
