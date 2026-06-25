@@ -343,9 +343,24 @@ function buildAcceptableMatrix(rng: () => number, target: number): boolean[][] {
 }
 
 /**
- * Generate raw allRecords rows for one store: one row per (check area,
- * inspection) - Acceptable when the matrix passes, otherwise a single
- * deficiency attribute. `count` is always 1 so every QSP stays on a clean ten.
+ * A small set of granular inspection points emitted under each check area (the
+ * new SI sub-level, 2026-06). All points in an area share the area's pass/fail
+ * so the store/area QSP stays on a clean ten — see makeStoreRecords.
+ */
+const MOCK_POINTS = [
+  "Baseboards",
+  "Floor, Corners",
+  "Floor, Edges",
+  "High Traffic Lane",
+  "Off Traffic Lane",
+] as const;
+
+/**
+ * Generate raw allRecords rows for one store: one row per (check area, point,
+ * inspection). The numbered area lives in selectTier and the granular point in
+ * checkmark (the 2026-06 two-level structure); an area is all-Acceptable when the
+ * matrix passes, otherwise every point carries a deficiency. `count` is always 1
+ * and all points in an area share its outcome, so every QSP stays on a clean ten.
  * The store produces different (deterministic) results under different programs.
  */
 function makeStoreRecords(
@@ -369,42 +384,49 @@ function makeStoreRecords(
     const inspector = INSPECTORS[Math.floor(rng() * INSPECTORS.length)];
 
     CHECK_AREAS.forEach((ca, areaIdx) => {
-      const base = {
-        id: rid++,
-        inspectionId,
-        recordDate,
-        uploadDate,
-        config: config.configurationName,
-        configId: config.configId,
-        outerTier: seed.outerTier,
-        outerTierId: seed.outerTierId,
-        midTier: FLOORCARE_CONFIG.midTier,
-        midTierId: 1,
-        selectTier: FLOORCARE_CONFIG.areaTypeName,
-        region: seed.state,
-        state: seed.state,
-        inspector,
-        checkmark: ca.label,
-        count: 1,
-      };
+      // New SI structure: the numbered area lives in selectTier; each area is
+      // inspected at several granular points (checkmark). All points in an area
+      // share the area's pass/fail so the store/area QSP stays on a clean ten.
+      const areaLabel = `${String(areaIdx + 1).padStart(2, "0")}. ${ca.label}`;
+      const pass = matrix[areaIdx][ins];
+      MOCK_POINTS.forEach((point) => {
+        const base = {
+          id: rid++,
+          inspectionId,
+          recordDate,
+          uploadDate,
+          config: config.configurationName,
+          configId: config.configId,
+          outerTier: seed.outerTier,
+          outerTierId: seed.outerTierId,
+          midTier: FLOORCARE_CONFIG.midTier,
+          midTierId: 1,
+          selectTier: areaLabel,
+          region: seed.state,
+          state: seed.state,
+          inspector,
+          checkmark: point,
+          count: 1,
+        };
 
-      if (matrix[areaIdx][ins]) {
-        rows.push({
-          ...base,
-          checkAttribute: "Acceptable",
-          isGood: true,
-          photo: false,
-        });
-      } else {
-        const def =
-          DEFICIENCY_ATTRIBUTES[Math.floor(rng() * DEFICIENCY_ATTRIBUTES.length)];
-        rows.push({
-          ...base,
-          checkAttribute: def.label,
-          isGood: false,
-          photo: rng() > 0.55,
-        });
-      }
+        if (pass) {
+          rows.push({
+            ...base,
+            checkAttribute: "Acceptable",
+            isGood: true,
+            photo: false,
+          });
+        } else {
+          const def =
+            DEFICIENCY_ATTRIBUTES[Math.floor(rng() * DEFICIENCY_ATTRIBUTES.length)];
+          rows.push({
+            ...base,
+            checkAttribute: def.label,
+            isGood: false,
+            photo: rng() > 0.7,
+          });
+        }
+      });
     });
   }
   return rows;

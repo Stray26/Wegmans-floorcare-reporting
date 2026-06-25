@@ -34,7 +34,27 @@ export interface DeficiencyReport {
   date?: string;
 }
 
-/** One of the 10 floorcare check areas for a store. */
+/**
+ * A granular inspection point within a check area — e.g. "Baseboards",
+ * "High Traffic Lane", "Floor, Corners". Smart Inspect added this deeper level
+ * under each area in 2026-06; the same point name can recur across areas, so
+ * points are always scoped to their area (never merged across areas).
+ */
+export interface CheckPointReport {
+  /** Slug of the point name, unique within its area. */
+  pointId: string;
+  /** Point name as inspected, e.g. "Baseboards". */
+  pointName: string;
+  acceptableCount: number;
+  deficiencyCount: number;
+  totalCount: number;
+  qspScore: number;
+  status: ScoreStatus;
+  /** Most common deficiency attribute on this point, if any. */
+  topDeficiency?: string;
+}
+
+/** One of the floorcare check areas for a store (Vestibules, Restrooms, …). */
 export interface CheckAreaReport {
   checkAreaId: string;
   checkAreaName: string;
@@ -46,6 +66,11 @@ export interface CheckAreaReport {
   status: ScoreStatus;
   topDeficiency?: string;
   deficiencyBreakdown: DeficiencyReport[];
+  /**
+   * Granular inspection points within this area (the new SI sub-level). Empty
+   * for older inspections that recorded only at the area level.
+   */
+  points: CheckPointReport[];
 }
 
 export interface PhotoReport {

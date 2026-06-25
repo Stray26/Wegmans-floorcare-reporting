@@ -51,6 +51,29 @@ function AreaRow({
 
       {open && (
         <div className="space-y-4 px-1 pb-4 pl-8">
+          {area.points.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Inspection points
+              </p>
+              {area.points.map((p) => (
+                <div key={p.pointId} className="flex items-center gap-3 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{p.pointName}</span>
+                  {p.topDeficiency && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {p.topDeficiency}
+                    </span>
+                  )}
+                  {!singleDay && (
+                    <span className="w-12 shrink-0 text-right tabular-nums text-muted-foreground">
+                      {formatScore(p.qspScore)}
+                    </span>
+                  )}
+                  <StatusBadge status={p.status} showDot={false} className="shrink-0" />
+                </div>
+              ))}
+            </div>
+          )}
           {area.deficiencyBreakdown.length > 0 ? (
             <div className="space-y-2">
               {area.deficiencyBreakdown.map((d) => (

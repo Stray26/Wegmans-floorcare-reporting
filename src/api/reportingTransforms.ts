@@ -11,6 +11,7 @@ import type { SIRecord, SITicket, SIInspectionNote } from "../types/smartInspect
 import type {
   StoreReport,
   CheckAreaReport,
+  CheckPointReport,
   DeficiencyReport,
   PortfolioReport,
   TicketReport,
@@ -41,16 +42,40 @@ function topDeficiencyName(breakdown: DeficiencyReport[]): string | undefined {
   return [...breakdown].sort((a, b) => b.count - a.count)[0].deficiencyName;
 }
 
-/** Build a single check area from the records belonging to one checkmark. */
-function buildCheckArea(
-  itemLabel: string,
-  records: SIRecord[],
-  thresholds: ScoreThreshold[]
-): CheckAreaReport {
+/**
+ * The numbered-area prefix, e.g. "01. Vestibules". Distinguishes the new
+ * inspection structure (area in selectTier) from the old one (area in checkmark).
+ */
+const NUMBERED_AREA = /^\s*\d+\s*[.\-)]/;
+
+/**
+ * Resolve a record's check area + granular point, tolerant of both structures:
+ *  - new (2026-06): selectTier carries the numbered area, checkmark the point
+ *  - old: checkmark carries the numbered area, no deeper point
+ */
+function areaAndPoint(r: SIRecord): { area: string; point: string | null } {
+  if (NUMBERED_AREA.test(r.areaType ?? "")) {
+    return { area: r.areaType, point: r.item || null };
+  }
+  return { area: r.item, point: null };
+}
+
+/** Stable id for a granular point (unique within its area). */
+function pointIdFor(name: string): string {
+  return (
+    "pt-" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+  );
+}
+
+/** Acceptable / total over a record set, plus a deficiency-attribute tally. */
+function tallyRecords(records: SIRecord[]): {
+  total: number;
+  acceptable: number;
+  defMap: Map<string, number>;
+} {
   let total = 0;
   let acceptable = 0;
   const defMap = new Map<string, number>();
-
   for (const r of records) {
     total += r.checkmarkCount;
     if (r.qspScore === 100) acceptable += r.checkmarkCount;
@@ -58,8 +83,57 @@ function buildCheckArea(
       defMap.set(r.deficiency, (defMap.get(r.deficiency) ?? 0) + r.checkmarkCount);
     }
   }
+  return { total, acceptable, defMap };
+}
 
-  const friendly = friendlyCheckmark(itemLabel);
+/** Build one granular point (e.g. "Baseboards") from its records within an area. */
+function buildCheckPoint(
+  pointName: string,
+  records: SIRecord[],
+  thresholds: ScoreThreshold[]
+): CheckPointReport {
+  const { total, acceptable, defMap } = tallyRecords(records);
+  const qsp = computeQspScore(acceptable, total);
+  const top = [...defMap.entries()].sort((a, b) => b[1] - a[1])[0];
+  return {
+    pointId: pointIdFor(pointName),
+    pointName,
+    acceptableCount: acceptable,
+    deficiencyCount: total - acceptable,
+    totalCount: total,
+    qspScore: qsp ?? 0,
+    status: getStatusForScore(qsp, thresholds),
+    topDeficiency: top ? englishLabel(top[0]) : undefined,
+  };
+}
+
+/**
+ * Build a check area from its records. Each area's records are further grouped
+ * into granular points (the new SI sub-level); old single-level data yields no
+ * points. Point names are kept verbatim (they are not bilingual labels).
+ */
+function buildCheckArea(
+  areaLabel: string,
+  records: SIRecord[],
+  thresholds: ScoreThreshold[]
+): CheckAreaReport {
+  const { total, acceptable, defMap } = tallyRecords(records);
+
+  // Granular points within this area, scoped so a same-named point in another
+  // area is never merged in.
+  const byPoint = new Map<string, SIRecord[]>();
+  for (const r of records) {
+    const { point } = areaAndPoint(r);
+    if (!point) continue;
+    const arr = byPoint.get(point);
+    if (arr) arr.push(r);
+    else byPoint.set(point, [r]);
+  }
+  const points: CheckPointReport[] = [...byPoint.entries()]
+    .map(([name, recs]) => buildCheckPoint(name, recs, thresholds))
+    .sort((a, b) => a.qspScore - b.qspScore);
+
+  const friendly = friendlyCheckmark(areaLabel);
   const deficiencyCount = total - acceptable;
   const defTotal = [...defMap.values()].reduce((s, n) => s + n, 0) || 1;
   const breakdown: DeficiencyReport[] = [...defMap.entries()]
@@ -85,6 +159,7 @@ function buildCheckArea(
     status: getStatusForScore(qsp, thresholds),
     topDeficiency: topDeficiencyName(breakdown),
     deficiencyBreakdown: breakdown,
+    points,
   };
 }
 
@@ -180,15 +255,18 @@ export function transformStoreReport(
   const building = records[0]?.building ?? meta.storeName;
   const state = records[0]?.state ?? records[0]?.region ?? meta.state ?? "";
 
-  // group by checkmark (item)
-  const byItem = new Map<string, SIRecord[]>();
+  // Group by check area (the numbered area level — selectTier in the new SI
+  // structure, checkmark in the old). buildCheckArea sub-groups each area's
+  // records into granular points.
+  const byArea = new Map<string, SIRecord[]>();
   for (const r of records) {
-    const arr = byItem.get(r.item);
+    const { area } = areaAndPoint(r);
+    const arr = byArea.get(area);
     if (arr) arr.push(r);
-    else byItem.set(r.item, [r]);
+    else byArea.set(area, [r]);
   }
-  const checkAreas = [...byItem.entries()].map(([item, recs]) =>
-    buildCheckArea(item, recs, thresholds)
+  const checkAreas = [...byArea.entries()].map(([area, recs]) =>
+    buildCheckArea(area, recs, thresholds)
   );
 
   const acceptableCount = checkAreas.reduce((s, c) => s + c.acceptableCount, 0);
@@ -211,7 +289,7 @@ export function transformStoreReport(
         id: r.id,
         url,
         caption: englishLabel(r.deficiency),
-        checkAreaName: englishLabel(friendlyCheckmark(r.item)),
+        checkAreaName: englishLabel(friendlyCheckmark(areaAndPoint(r).area)),
         deficiencyName: englishLabel(r.deficiency),
         capturedAt: r.inspectionDate,
       });
