@@ -71,12 +71,7 @@ export function StoreDetailModal({
               <DialogTitle className="text-lg font-semibold">
                 {store.storeName}
               </DialogTitle>
-              <div className="flex shrink-0 flex-col items-end gap-1.5">
-                <span className="text-3xl font-semibold leading-none tabular-nums">
-                  {formatScore(store.qspScore)}
-                </span>
-                <StatusBadge status={store.status} />
-              </div>
+              <StatusBadge status={store.status} className="shrink-0" />
             </div>
             <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
