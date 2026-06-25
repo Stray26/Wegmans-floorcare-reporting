@@ -27,14 +27,21 @@ export const FLOORCARE_CONFIG = {
  * general "Wegmans" config (19399, ~100 stores) is intentionally EXCLUDED so a
  * member granted that config doesn't trigger ~100 store PDFs in one email.
  * (Discovered via the 2026-06-16 fullPermissions/getMemberPermissions HAR.)
+ *
+ * 2026-06-25: the three Pre-Launch configs were re-versioned in SI (area types
+ * were added). SI archived the originals (20633 CSG, 20635 Tec, 20637 ABS) —
+ * renaming them "... Archived" — and created new active configs (20754 ABS,
+ * 20755 CSG, 20756 Tec). We report on the new active IDs; the archived versions
+ * and the stray "Test Config" (20745) are excluded by isFloorcareConfig's name
+ * guard (their names still contain "Floorcare"). Verified against live listConfigs.
  */
 export const FLOORCARE_CONFIG_IDS: number[] = [
   20035, // Wegmans Floorcare Pilot (original)
-  20633, // Pre-Launch - CSG
+  20754, // Pre-Launch - ABS          (active; replaced archived 20637)
+  20755, // Pre-Launch - CSG          (active; replaced archived 20633)
+  20756, // Pre-Launch - Tec Services (active; replaced archived 20635)
   20634, // Post-Launch - CSG
-  20635, // Pre-Launch - Tec Services
   20636, // Post-Launch - Tec Services
-  20637, // Pre-Launch - ABS
   20639, // Post-Launch - ABS
 ];
 
@@ -42,14 +49,20 @@ export const FLOORCARE_CONFIG_IDS: number[] = [
  * True if a config belongs to the Floorcare program (so the scheduled report
  * should include it). Matches by known id OR by name containing "Floorcare",
  * which is robust if new Floorcare configs are added later.
+ *
+ * Archived/test configs are excluded by name FIRST: when SI re-versions a config
+ * it appends "Archived" to the old one's name (which still contains "Floorcare"),
+ * and there is a stray "Test Config" — neither should ever reach a report.
  */
 export function isFloorcareConfig(cfg: {
   configId?: string | number | null;
   configName?: string | null;
 }): boolean {
+  const name = cfg.configName ?? "";
+  if (/\b(archived|test)\b/i.test(name)) return false;
   const id = cfg.configId != null ? Number(cfg.configId) : NaN;
   if (!Number.isNaN(id) && FLOORCARE_CONFIG_IDS.includes(id)) return true;
-  return /floorcare/i.test(cfg.configName ?? "");
+  return /floorcare/i.test(name);
 }
 
 /** The 10 floorcare check areas (bilingual). */

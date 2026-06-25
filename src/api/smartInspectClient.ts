@@ -135,10 +135,18 @@ export interface PermittedConfig {
 /**
  * Known config names by id. runWidgets matches configs BY NAME, so for configs
  * we know, prefer the canonical name over whatever label permissions carry —
- * a mismatched label would silently fetch zero records.
+ * a mismatched label would silently fetch zero records. Names verified against
+ * the live listConfigs (2026-06-25); the new active Pre-Launch IDs replaced the
+ * archived originals (20633/20635/20637).
  */
 const KNOWN_CONFIG_NAMES: Record<string, string> = {
-  [String(FLOORCARE_CONFIG.configId)]: FLOORCARE_CONFIG.configurationName,
+  [String(FLOORCARE_CONFIG.configId)]: FLOORCARE_CONFIG.configurationName, // 20035
+  "20754": "Pre-Launch - ABS Wegmans Floorcare Pilot",
+  "20755": "Pre-Launch - CSG Wegmans Floorcare Pilot",
+  "20756": "Pre-Launch - Tec Services Wegmans Floorcare Pilot",
+  "20639": "Post-Launch - ABS Wegmans Floorcare Pilot",
+  "20634": "Post-Launch - CSG Wegmans Floorcare Pilot",
+  "20636": "Post-Launch - Tec Services Wegmans Floorcare Pilot",
 };
 
 /** Group the permissions response by config, preserving the SI hierarchy. */
