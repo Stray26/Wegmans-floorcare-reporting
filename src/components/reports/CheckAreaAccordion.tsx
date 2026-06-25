@@ -10,9 +10,11 @@ import type { CheckAreaReport, PhotoReport } from "@/types/reporting";
 function AreaRow({
   area,
   photos,
+  showDeficiencyBreakdown,
 }: {
   area: CheckAreaReport;
   photos: PhotoReport[];
+  showDeficiencyBreakdown: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const { dateRange } = useSession();
@@ -74,7 +76,7 @@ function AreaRow({
               ))}
             </div>
           )}
-          {area.deficiencyBreakdown.length > 0 ? (
+          {showDeficiencyBreakdown && (area.deficiencyBreakdown.length > 0 ? (
             <div className="space-y-2">
               {area.deficiencyBreakdown.map((d) => (
                 <div key={d.deficiencyName} className="flex items-center gap-3">
@@ -97,7 +99,7 @@ function AreaRow({
             <p className="text-sm text-status-passed">
               All checks acceptable in this area.
             </p>
-          )}
+          ))}
 
           {areaPhotos.length > 0 && (
             <div>
@@ -116,9 +118,11 @@ function AreaRow({
 export function CheckAreaAccordion({
   areas,
   photos,
+  showDeficiencyBreakdown = true,
 }: {
   areas: CheckAreaReport[];
   photos: PhotoReport[];
+  showDeficiencyBreakdown?: boolean;
 }) {
   if (areas.length === 0) {
     return (
@@ -130,7 +134,12 @@ export function CheckAreaAccordion({
   return (
     <div>
       {areas.map((a) => (
-        <AreaRow key={a.checkAreaId} area={a} photos={photos} />
+        <AreaRow
+          key={a.checkAreaId}
+          area={a}
+          photos={photos}
+          showDeficiencyBreakdown={showDeficiencyBreakdown}
+        />
       ))}
     </div>
   );
