@@ -289,9 +289,13 @@ async function fetchRecordsAndTickets(
   tickets: SITicket[];
   images: SIRawRecord[];
   notes: SIInspectionNote[];
+  storeScores: Record<string, number>;
 }> {
   const groups = groupStoresByConfig(stores);
   if (groups.length <= 1) return fetchConfigRecordsAndTickets(stores, dateRange);
+  // Each program is fetched separately (outerTierIds are per-config) and merged.
+  // With the ID filter SI scopes each fetch to its own stores, so the records
+  // across configs are already distinct — no de-dupe needed.
   const results = await Promise.all(
     groups.map((g) => fetchConfigRecordsAndTickets(g, dateRange))
   );
@@ -300,6 +304,7 @@ async function fetchRecordsAndTickets(
     tickets: results.flatMap((r) => r.tickets),
     images: results.flatMap((r) => r.images),
     notes: results.flatMap((r) => r.notes),
+    storeScores: Object.assign({}, ...results.map((r) => r.storeScores)),
   };
 }
 
@@ -312,6 +317,8 @@ async function fetchConfigRecordsAndTickets(
   tickets: SITicket[];
   images: SIRawRecord[];
   notes: SIInspectionNote[];
+  /** Smart Inspect's own per-store QSP (qspBy by outerTier): storeName -> score. */
+  storeScores: Record<string, number>;
 }> {
   const outerTierIds = stores.map((s) => s.buildingId);
   const config = configOf(stores);
@@ -329,23 +336,27 @@ async function fetchConfigRecordsAndTickets(
     const tickets = widgetArray<SITicket>(resp.widgets["ticket.getTickets"]);
     // Mock photos are synthesized by mockPhotoUrl; notes come from getMockNotes.
     const notes = getMockNotes(outerTierIds, dateRange.start, dateRange.end, config.configName);
-    return { records, tickets, images: [], notes };
+    return { records, tickets, images: [], notes, storeScores: {} };
   }
 
-  // Live: outerTiers (store names) are injected/validated server-side; we send
-  // the names we believe we can access and the proxy intersects with the token.
-  const outerTierNames = stores.map((s) => s.storeName);
+  // Live: filter by Smart Inspect's REAL filter — outerTierIds + configIds (it
+  // ignores the name arrays). The proxy validates the IDs against the user's
+  // permissions server-side.
   const baseFilters: SIFilters = {
     clientId: FLOORCARE_CONFIG.clientId,
-    configs: [config.configName],
-    outerTiers: outerTierNames,
+    configIds: [Number(config.configId)],
+    outerTierIds: stores.map((s) => Number(s.buildingId)),
   };
 
   // Inspection data is the critical path. Tickets are best-effort: a ticket
-  // widget failure must NOT blank the whole dashboard.
+  // widget failure must NOT blank the whole dashboard. inspection.qspBy (by
+  // outerTier) returns Smart Inspect's own per-store QSP — the score source.
   const inspResp = await proxy<SIRunWidgetsResponse>("runWidgets", {
     filters: { ...baseFilters, inspectionRange: toFilter(dateRange) },
-    widgets: INSPECTION_WIDGETS,
+    widgets: {
+      ...INSPECTION_WIDGETS,
+      storeQsp: { properName: "inspection.qspBy", by: "outerTier" },
+    },
   });
 
   let tickets: SITicket[] = [];
@@ -364,9 +375,12 @@ async function fetchConfigRecordsAndTickets(
   ).map(transformApiRecord);
   const images = extractImageRecords(inspResp.widgets);
   const notes = extractNoteRecords(inspResp.widgets);
+  // Smart Inspect's per-store QSP from qspBy: { "115 - Tysons Corner": 80, … }.
+  const storeScores =
+    (inspResp.widgets["storeQsp"] as Record<string, number> | undefined) ?? {};
   // SI tickets have no photo link; associate inspection photos best-effort.
   attachTicketPhotos(tickets, images);
-  return { records, tickets, images, notes };
+  return { records, tickets, images, notes, storeScores };
 }
 
 function groupByBuilding(records: SIRecord[]): Map<string, SIRecord[]> {
@@ -404,10 +418,8 @@ export async function getPortfolioReport(
   dateRange: DateRange,
   thresholds: ScoreThreshold[]
 ) {
-  const { records, tickets, images, notes } = await fetchRecordsAndTickets(
-    stores,
-    dateRange
-  );
+  const { records, tickets, images, notes, storeScores } =
+    await fetchRecordsAndTickets(stores, dateRange);
   const byBuilding = groupByBuilding(records);
   const config = configOf(stores);
   const resolvePhoto = photoResolver(images);
@@ -424,7 +436,8 @@ export async function getPortfolioReport(
       meta.configName ?? config.configName,
       thresholds,
       resolvePhoto,
-      notes
+      notes,
+      storeScores[meta.storeName]
     )
   );
 
@@ -451,8 +464,8 @@ export async function getTickets(stores: StoreMeta[], dateRange: DateRange) {
   }
   const baseFilters: SIFilters = {
     clientId: FLOORCARE_CONFIG.clientId,
-    configs: [configOf(stores).configName],
-    outerTiers: stores.map((s) => s.storeName),
+    configIds: [Number(configOf(stores).configId)],
+    outerTierIds: stores.map((s) => Number(s.buildingId)),
   };
   const resp = await proxy<SIRunWidgetsResponse>("runWidgets", {
     filters: { ...baseFilters, isForTickets: true, ticketDates: toFilter(dateRange) },

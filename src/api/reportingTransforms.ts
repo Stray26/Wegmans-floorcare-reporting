@@ -248,7 +248,13 @@ export function transformStoreReport(
   configurationName: string,
   thresholds: ScoreThreshold[] = DEFAULT_THRESHOLDS,
   resolvePhotoUrl?: (r: SIRecord) => string | null,
-  noteRecords: SIInspectionNote[] = []
+  noteRecords: SIInspectionNote[] = [],
+  /**
+   * Smart Inspect's own per-store QSP (inspection.qspBy by outerTier). When
+   * present it's used verbatim — the score then comes straight from the API.
+   * Omitted in mock mode / server render, where it's computed (same formula).
+   */
+  apiStoreScore?: number
 ): StoreReport {
   const buildingId = meta.buildingId;
   const uploaded = records.length > 0;
@@ -272,7 +278,9 @@ export function transformStoreReport(
   const acceptableCount = checkAreas.reduce((s, c) => s + c.acceptableCount, 0);
   const totalCheckCount = checkAreas.reduce((s, c) => s + c.totalCount, 0);
   const deficiencyCount = totalCheckCount - acceptableCount;
-  const qspScore = uploaded ? computeQspScore(acceptableCount, totalCheckCount) : null;
+  const computedQsp = uploaded ? computeQspScore(acceptableCount, totalCheckCount) : null;
+  // Prefer Smart Inspect's own QSP (qspBy); fall back to the computed value.
+  const qspScore = uploaded ? apiStoreScore ?? computedQsp : null;
   const status = uploaded ? getStatusForScore(qspScore, thresholds) : "not-uploaded";
 
   const deficiencies = aggregateDeficiencies(checkAreas, building);

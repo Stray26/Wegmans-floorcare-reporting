@@ -66,12 +66,20 @@ export function StoreDetailModal({
       {store && (
         <DialogContent className="max-w-4xl p-0">
           {/* Header */}
-          <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
-            <div>
-              <DialogTitle className="flex items-center gap-2 text-lg">
+          <div className="border-b border-border px-6 py-5 pr-12">
+            <div className="flex items-start justify-between gap-4">
+              <DialogTitle className="text-lg font-semibold">
                 {store.storeName}
               </DialogTitle>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <span className="text-3xl font-semibold leading-none tabular-nums">
+                  {formatScore(store.qspScore)}
+                </span>
+                <StatusBadge status={store.status} />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5" />
                   {store.city}, {store.state}
@@ -81,29 +89,23 @@ export function StoreDetailModal({
                 <span>·</span>
                 <span>Last upload: {formatDateTime(store.lastUploadedAt)}</span>
               </div>
-            </div>
-            <div className="flex items-center gap-2 pr-8">
-              <div className="text-right">
-                <p className="text-2xl font-semibold tabular-nums">
-                  {formatScore(store.qspScore)}
-                </p>
-                <StatusBadge status={store.status} />
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigate(`/my-store?store=${store.storeId}`);
+                    onClose();
+                  }}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Open dashboard
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportPdf}>
+                  <Download className="h-4 w-4" />
+                  PDF
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigate(`/my-store?store=${store.storeId}`);
-                  onClose();
-                }}
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                Open dashboard
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportPdf}>
-                <Download className="h-4 w-4" />
-                PDF
-              </Button>
             </div>
           </div>
 

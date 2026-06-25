@@ -95,24 +95,27 @@ export function windowDays(freq: SubscriptionRow["frequency"]): number {
 }
 
 async function fetchStoreData(
-  storeNames: string[],
-  configName: string,
+  outerTierIds: string[],
+  configId: string,
   range: { start: string; end: string }
 ): Promise<{
   records: SIRecord[];
   tickets: SITicket[];
   images: SIRawRecord[];
   notes: SIInspectionNote[];
+  /** Smart Inspect's own per-store QSP (qspBy by outerTier): storeName -> score. */
+  storeScores: Record<string, number>;
 }> {
   const inspectionRange = {
     startDate: `${range.start}T00:00:00Z`,
     endDate: `${range.end}T23:59:59Z`,
     timezone: FLOORCARE_CONFIG.timezone,
   };
+  // Filter by Smart Inspect's real filter (IDs); runWidgets ignores name arrays.
   const baseFilters = {
     clientId: FLOORCARE_CONFIG.clientId,
-    configs: [configName],
-    outerTiers: storeNames,
+    configIds: [Number(configId)],
+    outerTierIds: outerTierIds.map(Number),
   };
   const inspResp = await siPost<SIRunWidgetsResponse>("/runWidgets", {
     filters: { ...baseFilters, inspectionRange },
@@ -120,6 +123,7 @@ async function fetchStoreData(
       "inspection.details": {},
       "inspection.allRecords": {},
       "inspection.imageRecords": {},
+      storeQsp: { properName: "inspection.qspBy", by: "outerTier" },
     },
   });
   let tickets: SITicket[] = [];
@@ -137,7 +141,9 @@ async function fetchStoreData(
   );
   const images = extractImageRecords(inspResp.widgets);
   const notes = extractNoteRecords(inspResp.widgets);
-  return { records, tickets, images, notes };
+  const storeScores =
+    (inspResp.widgets["storeQsp"] as Record<string, number> | undefined) ?? {};
+  return { records, tickets, images, notes, storeScores };
 }
 
 function buildStoreReport(
@@ -148,7 +154,8 @@ function buildStoreReport(
   records: SIRecord[],
   tickets: SITicket[],
   images: SIRawRecord[],
-  notes: SIInspectionNote[]
+  notes: SIInspectionNote[],
+  apiStoreScore?: number
 ): StoreReport {
   const meta: StoreMeta = {
     buildingId: store.outerTierId,
@@ -173,7 +180,8 @@ function buildStoreReport(
     configName,
     DEFAULT_THRESHOLDS,
     resolvePhoto,
-    notes
+    notes,
+    apiStoreScore
   );
 }
 
@@ -257,9 +265,9 @@ export async function sendReportForSubscription(
   // Build a StoreReport for every store (used by both report types).
   const built: { report: StoreReport; storeName: string }[] = [];
   for (const grp of groups.values()) {
-    const { records, tickets, images, notes } = await fetchStoreData(
-      grp.stores.map((s) => s.storeName),
-      grp.configName,
+    const { records, tickets, images, notes, storeScores } = await fetchStoreData(
+      grp.stores.map((s) => s.outerTierId),
+      grp.configId,
       range
     );
     for (const s of grp.stores) {
@@ -272,7 +280,8 @@ export async function sendReportForSubscription(
           records,
           tickets,
           images,
-          notes
+          notes,
+          storeScores[s.storeName]
         ),
         storeName: s.storeName,
       });

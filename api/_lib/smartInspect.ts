@@ -355,3 +355,37 @@ export function reconcileOuterTiers(
   }
   return requested;
 }
+
+/** Flatten a getPermissions response into the set of permitted outer-tier IDs. */
+export function outerTierIdsFrom(resp: PermissionsResponse): Set<string> {
+  const perms = Array.isArray(resp.permissions) ? resp.permissions : [resp.permissions];
+  const ids = new Set<string>();
+  for (const p of perms) {
+    for (const cfg of p?.permissionConfigs ?? []) {
+      for (const ot of cfg.permissionOuterTiers ?? []) {
+        const id = String(ot.outerTierId ?? ot.id ?? "");
+        if (id) ids.add(id);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * Reconcile requested outer-tier IDs against the caller's permitted IDs — the
+ * ID-based analogue of reconcileOuterTiers. Smart Inspect's runWidgets honors
+ * `outerTierIds` (it ignores the name arrays), so this is the real store gate.
+ */
+export function reconcileOuterTierIds(
+  allowed: Set<string>,
+  requested: Array<string | number> | undefined
+): Array<string | number> {
+  if (!requested || requested.length === 0) return [...allowed];
+  const denied = requested.filter((id) => !allowed.has(String(id)));
+  if (denied.length > 0) {
+    throw Object.assign(new Error(`Forbidden store(s): ${denied.join(", ")}`), {
+      statusCode: 403,
+    });
+  }
+  return requested;
+}

@@ -46,8 +46,14 @@ export interface SIFilters {
   isForTickets?: boolean;
   ticketDates?: SIDateFilter;
   clientId: number;
-  configs: string[]; // matched by NAME
-  outerTiers?: string[]; // store names; omit/empty = all permitted
+  /** Config NAMES — legacy; Smart Inspect actually filters by configIds. */
+  configs?: string[];
+  /** Config IDs — Smart Inspect's real config filter. */
+  configIds?: number[];
+  /** Store NAMES — Smart Inspect IGNORES these; kept for legacy callers. */
+  outerTiers?: string[];
+  /** Outer-tier IDs — Smart Inspect's real store filter (what it honors). */
+  outerTierIds?: Array<number | string>;
   inspectors?: string[];
 }
 

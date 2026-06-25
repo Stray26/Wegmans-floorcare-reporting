@@ -3,8 +3,10 @@ import {
   siPost,
   ENDPOINT_PATHS,
   outerTierNamesFrom,
+  outerTierIdsFrom,
   getUserPermissions,
   reconcileOuterTiers,
+  reconcileOuterTierIds,
 } from "./_lib/smartInspect.js";
 import { readSession, type PortalSession } from "./_lib/session.js";
 
@@ -63,14 +65,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // runWidgets: validate/inject the USER's permitted outer tiers.
+    // runWidgets: validate/inject the USER's permitted stores. Smart Inspect
+    // honors `outerTierIds` (it ignores the name arrays), so when the client
+    // sends IDs we validate THOSE; otherwise fall back to the legacy name gate.
     if (endpoint === "runWidgets") {
-      const allowed = await userAllowedStores(session);
+      const perms = await getUserPermissions(
+        session.siSessionToken,
+        session.companyId,
+        session.memberId
+      );
       const filters = (body.filters ?? {}) as {
         outerTiers?: string[];
+        outerTierIds?: Array<string | number>;
         [k: string]: unknown;
       };
-      filters.outerTiers = reconcileOuterTiers(allowed, filters.outerTiers);
+      if (Array.isArray(filters.outerTierIds) && filters.outerTierIds.length > 0) {
+        filters.outerTierIds = reconcileOuterTierIds(
+          outerTierIdsFrom(perms),
+          filters.outerTierIds
+        );
+      } else {
+        filters.outerTiers = reconcileOuterTiers(
+          outerTierNamesFrom(perms),
+          filters.outerTiers
+        );
+      }
       const data = await siPost(path, { ...body, filters });
       res.status(200).json(data);
       return;
