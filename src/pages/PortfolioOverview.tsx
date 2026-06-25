@@ -138,7 +138,7 @@ export function PortfolioOverview() {
       {/* Store-based KPI cards */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
-          label="Stores Passed"
+          label="Meets Standard"
           value={portfolio.storesPassed}
           status="passed"
           active={statusFilter === "passed"}
@@ -152,7 +152,7 @@ export function PortfolioOverview() {
           onClick={() => toggleStatus("needs-improvement")}
         />
         <KpiCard
-          label="Stores Failed"
+          label="Below Standard"
           value={portfolio.storesFailed}
           status="failed"
           active={statusFilter === "failed"}

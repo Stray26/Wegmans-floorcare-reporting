@@ -6,14 +6,14 @@ import type { ScoreThreshold, ScoreStatus } from "@/types/reporting";
  * without changing consumers — everything reads through useScoreThresholds.
  *
  * QSP Score = Acceptable checks / Total checks * 100.
- *  - Passed:            90 – 100   (green)
+ *  - Meets Standard:    90 – 100   (green)
  *  - Needs Improvement: 80 – 89.99 (yellow)
- *  - Failed:             0 – 79.99 (red)
+ *  - Below Standard:     0 – 79.99 (red)
  *  - Not Uploaded:      no inspection in range (gray) — handled separately,
  *    never derived from a numeric score.
  */
 export const DEFAULT_THRESHOLDS: ScoreThreshold[] = [
-  { status: "passed", label: "Passed", min: 90, max: 100, color: "#16a34a" },
+  { status: "passed", label: "Meets Standard", min: 90, max: 100, color: "#16a34a" },
   {
     status: "needs-improvement",
     label: "Needs Improvement",
@@ -21,7 +21,7 @@ export const DEFAULT_THRESHOLDS: ScoreThreshold[] = [
     max: 89.99,
     color: "#d97706",
   },
-  { status: "failed", label: "Failed", min: 0, max: 79.99, color: "#dc2626" },
+  { status: "failed", label: "Below Standard", min: 0, max: 79.99, color: "#dc2626" },
   {
     status: "not-uploaded",
     label: "Not Uploaded",

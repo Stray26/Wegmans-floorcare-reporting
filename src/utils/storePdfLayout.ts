@@ -70,9 +70,9 @@ const STATUS_COLOR: Record<ScoreStatus, [number, number, number]> = {
   "not-uploaded": [107, 114, 128],
 };
 const STATUS_LABEL: Record<ScoreStatus, string> = {
-  passed: "Passed",
+  passed: "Meets Standard",
   "needs-improvement": "Needs Improvement",
-  failed: "Failed",
+  failed: "Below Standard",
   "not-uploaded": "Not Uploaded",
 };
 

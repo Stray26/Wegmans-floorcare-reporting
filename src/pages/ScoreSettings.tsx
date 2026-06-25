@@ -46,7 +46,7 @@ export function ScoreSettings() {
   const save = () => {
     if (!valid) return;
     const next: ScoreThreshold[] = [
-      { status: "passed", label: "Passed", min: p, max: 100, color: "#16a34a" },
+      { status: "passed", label: "Meets Standard", min: p, max: 100, color: "#16a34a" },
       {
         status: "needs-improvement",
         label: "Needs Improvement",
@@ -56,7 +56,7 @@ export function ScoreSettings() {
       },
       {
         status: "failed",
-        label: "Failed",
+        label: "Below Standard",
         min: 0,
         max: Number((n - 0.01).toFixed(2)),
         color: "#dc2626",
@@ -72,7 +72,7 @@ export function ScoreSettings() {
     setThresholds(next);
     toast({
       title: "Thresholds saved",
-      description: `Passed ≥ ${p} · Needs Improvement ${n}–${(p - 0.01).toFixed(2)} · Failed < ${n}`,
+      description: `Meets Standard ≥ ${p} · Needs Improvement ${n}–${(p - 0.01).toFixed(2)} · Below Standard < ${n}`,
       variant: "success",
     });
   };
@@ -111,7 +111,7 @@ export function ScoreSettings() {
           <CardContent className="space-y-4">
             <label className="block">
               <span className="mb-1 block text-sm font-medium">
-                Passed — minimum score
+                Meets Standard — minimum score
               </span>
               <Input
                 type="number"
@@ -122,7 +122,7 @@ export function ScoreSettings() {
                 onChange={(e) => setPassedMin(e.target.value)}
               />
               <span className="mt-1 block text-xs text-muted-foreground">
-                Scores at or above this are Passed (green).
+                Scores at or above this meet standard (green).
               </span>
             </label>
 
@@ -139,15 +139,15 @@ export function ScoreSettings() {
                 onChange={(e) => setNiMin(e.target.value)}
               />
               <span className="mt-1 block text-xs text-muted-foreground">
-                Scores from here up to Passed are Needs Improvement (yellow);
-                anything below is Failed (red).
+                Scores from here up to the Meets Standard minimum are Needs
+                Improvement (yellow); anything below is Below Standard (red).
               </span>
             </label>
 
             {!valid && (
               <p className="rounded-md bg-status-failed-bg px-3 py-2 text-xs text-status-failed">
-                Needs Improvement min must be greater than 0 and less than
-                Passed min, and Passed min must be ≤ 100.
+                Needs Improvement min must be greater than 0 and less than the
+                Meets Standard min, and the Meets Standard min must be ≤ 100.
               </p>
             )}
           </CardContent>
@@ -169,8 +169,8 @@ export function ScoreSettings() {
             />
             <PreviewRow status="not-uploaded" range="No inspection in range" />
             <p className="pt-1 text-xs text-muted-foreground">
-              Not Uploaded is always separate from Failed and never derived from a
-              numeric score.
+              Not Uploaded is always separate from Below Standard and never
+              derived from a numeric score.
             </p>
           </CardContent>
         </Card>

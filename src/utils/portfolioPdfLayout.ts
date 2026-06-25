@@ -29,9 +29,9 @@ const STATUS_COLOR: Record<ScoreStatus, [number, number, number]> = {
   "not-uploaded": [107, 114, 128],
 };
 const STATUS_LABEL: Record<ScoreStatus, string> = {
-  passed: "Passed",
+  passed: "Meets Standard",
   "needs-improvement": "Needs Improvement",
-  failed: "Failed",
+  failed: "Below Standard",
   "not-uploaded": "Not Uploaded",
 };
 const STATUS_ORDER: Record<ScoreStatus, number> = {
@@ -119,9 +119,9 @@ export function renderPortfolioReportDoc(
   /* ---------------------------- KPI strip ---------------------------- */
   let y = bandY + bandH + 8;
   const kpis: [string, string, [number, number, number]][] = [
-    ["Stores Passed", String(portfolio.storesPassed), STATUS_COLOR.passed],
+    ["Meets Standard", String(portfolio.storesPassed), STATUS_COLOR.passed],
     ["Needs Improvement", String(portfolio.storesNeedsImprovement), STATUS_COLOR["needs-improvement"]],
-    ["Stores Failed", String(portfolio.storesFailed), STATUS_COLOR.failed],
+    ["Below Standard", String(portfolio.storesFailed), STATUS_COLOR.failed],
     ["Not Uploaded", String(portfolio.storesNotUploaded), STATUS_COLOR["not-uploaded"]],
     ["Uploaded", `${portfolio.storesUploaded} / ${portfolio.totalStores}`, INK],
     ["Average QSP", fmtScore(portfolio.averageQspScore), INK],
